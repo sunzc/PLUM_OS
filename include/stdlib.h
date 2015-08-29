@@ -27,13 +27,15 @@ typedef void (*sighandler_t)(int);
 sighandler_t signal(int signum, sighandler_t handler);
 int kill(pid_t pid, int sig);
 unsigned int alarm(unsigned int seconds);
-#define SIGINT		 2
-#define SIGKILL		 9
-#define SIGUSR1		10
-#define SIGSEGV		11
-#define SIGALRM		14
-#define SIGTERM		15
-#define SIGCHLD		17
+#define SIG_DFL ((__sighandler_t)0)
+#define SIG_IGN ((__sighandler_t)1)
+#define SIGINT     2
+#define SIGKILL    9
+#define SIGUSR1   10
+#define SIGSEGV   11
+#define SIGALRM   14
+#define SIGTERM   15
+#define SIGCHLD   17
 
 // paths
 char *getcwd(char *buf, size_t size);
@@ -57,10 +59,10 @@ int dup2(int oldfd, int newfd);
 #define NAME_MAX 255
 struct dirent
 {
-	long d_ino;
-	off_t d_off;
-	unsigned short d_reclen;
-	char d_name [NAME_MAX+1];
+  long d_ino;
+  off_t d_off;
+  unsigned short d_reclen;
+  char d_name [NAME_MAX+1];
 };
 void *opendir(const char *name);
 struct dirent *readdir(void *dir);
