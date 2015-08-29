@@ -36,6 +36,7 @@ unsigned int alarm(unsigned int seconds);
 #define SIGALRM   14
 #define SIGTERM   15
 #define SIGCHLD   17
+int sigreturn(unsigned long __unused);
 
 // paths
 char *getcwd(char *buf, size_t size);
