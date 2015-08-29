@@ -15,7 +15,7 @@ SHELL=/bin/sh
 KERN_SRCS:=$(shell find sys/ -name \*.c -o -name \*.s)
 LIBC_SRCS:=$(shell find libc/ -name \*.c -o -name \*.s)
 CRT_SRCS:=$(shell find crt/ -name \*.c -o -name \*.s)
-BIN_SRCS:=$(shell find bin/\* -name \*.c)
+BIN_SRCS:=$(shell find bin/* -name \*.c)
 INCLUDES:=$(shell find include/ -type f -name \*.h)
 BINS:=$(addprefix $(ROOTFS)/,$(wildcard bin/*))
 
@@ -45,7 +45,7 @@ obj/tarfs.o: $(BINS)
 $(ROOTLIB)/libc.a: $(patsubst %.s,obj/%.asm.o,$(LIBC_SRCS:%.c=obj/%.o))
 	$(AR) rcs $@ $^
 
-$(BINS): $(patsubst %.s,obj/%.asm.o,$(CRT_SRCS:%.c=obj/%.o)) $(ROOTLIB)/libc.a $(shell find bin/ -type f -name \*.c) $(INCLUDES)
+$(BINS): $(patsubst %.s,obj/%.asm.o,$(CRT_SRCS:%.c=obj/%.o)) $(ROOTLIB)/libc.a $(BIN_SRCS) $(INCLUDES)
 	@$(MAKE) --no-print-directory BIN=$@ binary
 
 binary: $(patsubst %.c,obj/%.o,$(wildcard $(BIN:rootfs/%=%)/*.c))
