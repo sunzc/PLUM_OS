@@ -51,7 +51,6 @@ enum { SEEK_SET = 0, SEEK_CUR = 1, SEEK_END = 2 };
 typedef uint64_t off_t;
 off_t lseek(int fildes, off_t offset, int whence);
 int close(int fd);
-int pipe(int filedes[2]);
 int dup(int oldfd);
 int dup2(int oldfd, int newfd);
 
