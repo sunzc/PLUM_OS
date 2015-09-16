@@ -1,4 +1,3 @@
-#include "../include/sys/defs.h"
 #include <stdio.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -8,10 +7,10 @@
 #include <sys/mman.h>
 
 struct superblock {
-	uint32_t magic;
+	u_int32_t magic;
 };
 struct inode {
-	uint64_t refcount;
+	u_int64_t refcount;
 };
 
 int main(int argc, char* argv[]) {
