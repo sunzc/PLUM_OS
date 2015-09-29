@@ -3,6 +3,7 @@
 
 #include <sys/defs.h>
 
+extern uint64_t ticks;
 void printf(const char *fmt, ...);
 
 #endif

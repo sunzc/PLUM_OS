@@ -1,5 +1,6 @@
 #include <sys/sbunix.h>
 #include <sys/gdt.h>
+#include <sys/idt.h>
 #include <sys/tarfs.h>
 
 void start(uint32_t* modulep, void* physbase, void* physfree)
@@ -43,5 +44,6 @@ void boot(void)
 	);
 	s = "!!!!! start() returned !!!!!";
 	for(v = (char*)0xb8000; *s; ++s, v += 2) *v = *s;
+	init_idt();
 	while(1);
 }
