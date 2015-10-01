@@ -1,9 +1,12 @@
 #include <sys/sbunix.h>
 #include <sys/irq.h>
 
-// borrow a lot from xv6 picirq.c
-// A little findings about pic is that the EOI_AUTO bit is equivalent to
-// adding pic_sendeoi() at the end of interrupt handler
+// code programming pic is borrowed  from xv6 picirq.c
+// I chose to refer to xv6 implementation on programming pic for they give a clear
+// description on each config bit of the ICW
+// A little finding about pic is that the EOI_AUTO bit is equivalent to
+// adding pic_sendeoi() at the end of interrupt handler, this bit is set in xv6, but not
+// set in the OSDev.org/pic webpage turtorial.
 
 #define IO_PIC1		0x20	// Master (IRQs 0-7)
 #define IO_PIC2		0xA0	// Slave (IRQs 8-15)

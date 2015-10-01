@@ -4,6 +4,8 @@
 #include <sys/defs.h>
 
 extern uint64_t ticks;
+extern void kbdinit(void);
+extern void kbdintr(void);
 void printf(const char *fmt, ...);
 void put_to_screen(char c, int col, int row, int color);
 

@@ -3,7 +3,6 @@
 #include <sys/idt.h>
 #include <sys/pic.h>
 #include <sys/timer.h>
-#include <sys/kbd.h>
 #include <sys/tarfs.h>
 
 void start(uint32_t* modulep, void* physbase, void* physfree)

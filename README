@@ -1,3 +1,18 @@
+Author: Zhichuang Sun
+SBUID: 110345185
+Date:   Oct 1, 2015
+SBU OS Project : Warmup2
+Description:
+	Implement kernel printf()
+	Implement timer ISR
+	Implement keyboard ISR
+
+For Grading Consideration:
+	Some of the code that deal with the configuration of hardware is borrowed:
+		sys/itimer.c borrowed from xv6, which configure the mode and frequency of Programmable Interval Timer(8253/8254)
+		sys/pic.c    borrowed from xv6, which configure the pic, especially the four config word needed by 8259PIC
+		include/sys/kbd.h scan code map borrowed xv6/kbd.h
+
 The provided Makefile:
   1) builds a kernel
   2) copies it into rootfs/boot/kernel/kernel

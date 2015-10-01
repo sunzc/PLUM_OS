@@ -1,10 +1,12 @@
 #include <sys/sbunix.h>
 #include <sys/irq.h>
+#include <sys/kbd.h>
 #include <sys/pic.h>
 
 #define KBD_STAT_PORT		0x64	// kbd controller status port(I)
 #define KBD_DATA_INBF		0x01	// kdb data in buffer
 #define KBD_DATA_PORT		0x60	// kbd data port(I)
+
 
 void kbdinit(void) {
 	picenable(IRQ_KBD);
@@ -33,24 +35,27 @@ void kbdintr(void) {
 	else if (is_special_key_pressed(data))
 		special_key_pressed = data;
 	else if (is_normal_key_released(data) && special_key_pressed == 0) {
-		put_to_screen('b', 65, 24, 0);
+		put_to_screen(' ', 64, 24, 0);
+		put_to_screen(normalmap[normal_key_pressed], 65, 24, 0);
 		normal_key_pressed = 0; // clear it
 	} else if (is_normal_key_released(data) && special_key_pressed != 0) {
 		switch(special_key_pressed) { 
 			// to make life easier, we handle special key when either normal key or special key
 			// released
 			case 0x2A: // Shift
-				put_to_screen('B', 65, 24, 0);
+				put_to_screen(' ', 64, 24, 0);
+				put_to_screen(shiftmap[normal_key_pressed], 65, 24, 0);
 				break;
 			case 0x38: // Alt
 				put_to_screen('@', 64, 24, 0);
-				put_to_screen('B', 65, 24, 0);
+				put_to_screen(normalmap[normal_key_pressed], 65, 24, 0);
 				break;
 			case 0x1D: // Ctrl
 				put_to_screen('^', 64, 24, 0);
-				put_to_screen('B', 65, 24, 0);
+				put_to_screen(normalmap[normal_key_pressed], 65, 24, 0);
 				break;
 		}
+
 		normal_key_pressed = 0;
 		special_key_pressed = 0;
 	} else if (is_special_key_released(data)) {
@@ -59,15 +64,16 @@ void kbdintr(void) {
 				// to make life easier, we handle special key when either normal key or special key
 				// released
 				case 0x2A: // Shift
-					put_to_screen('B', 65, 24, 0);
+					put_to_screen(' ', 64, 24, 0);
+					put_to_screen(shiftmap[normal_key_pressed], 65, 24, 0);
 					break;
 				case 0x38: // Alt
 					put_to_screen('@', 64, 24, 0);
-					put_to_screen('B', 65, 24, 0);
+					put_to_screen(normalmap[normal_key_pressed], 65, 24, 0);
 					break;
 				case 0x1D: // Ctrl
 					put_to_screen('^', 64, 24, 0);
-					put_to_screen('B', 65, 24, 0);
+					put_to_screen(normalmap[normal_key_pressed], 65, 24, 0);
 					break;
 			}
 
@@ -77,7 +83,7 @@ void kbdintr(void) {
 		special_key_pressed = 0; // clear it
 	}
 
-	printf("in kbdintr: data is %x\n", data);
+	//printf("in kbdintr: data is %x\n", data);
 
 	pic_sendeoi(33);
 
@@ -85,14 +91,14 @@ void kbdintr(void) {
 }
 
 static int is_normal_key_pressed(uint16_t data) {
-	if (data == 0x30) // B pressed
+	if (normalmap[data] != 0) // B pressed
 		return 1;
 	else
 		return 0;
 }
 
 static int is_normal_key_released(uint16_t data) {
-	if (data == 0xB0) // B released, 0x32 is followed, but escape it first
+	if (normalmap[data - 0x80] != 0) // B released, 0x32 is followed, but escape it first
 		return 1;
 	else
 		return 0;
