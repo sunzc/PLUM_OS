@@ -17,6 +17,7 @@ static char *int_to_string(char *buf, int n);
 static char *longlong_to_hexstring(char *buf, unsigned long long n);
 static void scoll_screen_up(void);
 static void print_to_screen(char c);
+void put_to_screen(char c, int col, int row, int color);
 int vsprintf(char *str, const char *fmt, va_list ap);
 
 typedef struct loc{
@@ -30,6 +31,11 @@ loc cursor = {
 	     };
 
 static char* screen_buffer = (char *)VGA_BUFFER_ADDR;
+
+void put_to_screen(char c, int col, int row, int color){
+	screen_buffer[row * MAX_COLUMN * 2 + col * 2] = c;
+	screen_buffer[row * MAX_COLUMN * 2 + col * 2 + 1] = color;
+}
 
 void printf(const char *format, ...) {
 	va_list val;

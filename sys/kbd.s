@@ -1,8 +1,8 @@
 /* filename: isr_wrapper_timer.s */
-.global _isr_wrapper_timer
+.global _isr_wrapper_kbd
 .align 4
 
-_isr_wrapper_timer:
+_isr_wrapper_kbd:
 	pushq %rax
 	pushq %rbx
 	pushq %rcx
@@ -19,7 +19,8 @@ _isr_wrapper_timer:
 	pushq %r15
 
 	cld /*  C code following the sysV ABI requires DF to be clear on function entry */
-	call interrupt_handler_timer
+	call kbdintr
+	sti
 	popq %r15 
 	popq %r14 
 	popq %r13 
