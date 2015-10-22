@@ -19,6 +19,14 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 	}
 	printf("tarfs in [%p:%p]\n", &_binary_tarfs_start, &_binary_tarfs_end);
 	// kernel starts here
+	picinit();
+	timerinit();
+	kbdinit();
+	init_idt();
+	__asm volatile("sti"::);
+	printf("after init_idt\n");
+
+	while(1);
 }
 
 #define INITIAL_STACK_SIZE 4096
@@ -46,11 +54,5 @@ void boot(void)
 	);
 	s = "!!!!! start() returned !!!!!";
 	for(v = (char*)0xb8000; *s; ++s, v += 2) *v = *s;
-	picinit();
-	timerinit();
-	kbdinit();
-	init_idt();
-	__asm volatile("sti"::);
-	printf("after init_idt\n");
 	while(1);
 }
