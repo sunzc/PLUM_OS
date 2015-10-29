@@ -15,6 +15,7 @@ typedef uint64_t size_t;
 
 static char *int_to_string(char *buf, int n);
 static char *longlong_to_hexstring(char *buf, unsigned long long n);
+static char *longlong_to_string(char *buf, unsigned long long n);
 static void scoll_screen_up(void);
 static void print_to_screen(char c);
 void put_to_screen(char c, int col, int row, int color);
@@ -122,6 +123,13 @@ int vsprintf(char *str, const char *fmt, va_list ap){
 				while(s[j] != 0){
 					str[idx++] = s[j++];
 				}
+			} else if(c == 'u'){
+				ull = va_arg(ap, unsigned long long);
+				s = longlong_to_string(buf, ull);
+				j = 0;
+				while(s[j] != 0){
+					str[idx++] = s[j++];
+				}
 			} else {
 				str[idx++] = '%';
 				str[idx++] = 'l';
@@ -156,6 +164,22 @@ static char *int_to_string(char *buf, int n){
 
 	if(negative)
 		buf[--pos] = '-';
+
+	return &buf[pos];
+}
+
+static char *longlong_to_string(char *buf, unsigned long long n){
+	int pos = NUM_BUF;
+
+	buf[--pos] = 0;
+
+	while(n >= 10) {
+		int digit = n % 10;
+		n /= 10;
+		buf[--pos] = digit + '0';
+	}
+
+	buf[--pos] = n + '0';
 
 	return &buf[pos];
 }

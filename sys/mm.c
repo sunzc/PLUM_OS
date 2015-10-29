@@ -73,27 +73,47 @@ static void setup_bitmap() {
 
 	/* mark bootloader image busy, discard half usable page*/
 	pfn_start = (uint64_t)_loaderbase >> PG_BITS;
-	pfn_end = ((uint64_t)_loaderend >> PG_BITS) - 1;
+	pfn_end = ((uint64_t)_loaderend >> PG_BITS);
+	printf("boot: pfn_start: %lu pfn_end : %lu\n", pfn_start, pfn_end);
 	for (i = pfn_start; i < pfn_end; i++)
 		bitmap[i/64] |= 1 << (i%64);
 
 	/* mark memory hole busy forever */
 	pfn_start = (uint64_t)(pmb_array[0].base + pmb_array[0].length) >> PG_BITS;
-	pfn_end = ((uint64_t)pmb_array[1].base >> PG_BITS) - 1;
+	pfn_end = ((uint64_t)pmb_array[1].base >> PG_BITS);
+	printf("hole: pfn_start: %lu pfn_end : %lu\n", pfn_start, pfn_end);
 	for (i = pfn_start; i < pfn_end; i++)
 		bitmap[i/64] |= 1 << (i%64);
 
 	/* mark kernel image busy forever */
 	pfn_start = (uint64_t)_physbase >> PG_BITS;
-	pfn_end = ((uint64_t)_physfree >> PG_BITS) - 1;
+	pfn_end = ((uint64_t)_physfree >> PG_BITS);
+	printf("kernel: pfn_start: %lu pfn_end : %lu\n", pfn_start, pfn_end);
 	for (i = pfn_start; i < pfn_end; i++)
 		bitmap[i/64] |= 1 << (i%64);
 
 	/* mark physical memory padding area busy forever */
 	pfn_start = (uint64_t)(pmb_array[pmb_count - 1].base + pmb_array[pmb_count - 1].length) >> PG_BITS;
-	pfn_end = ((uint64_t)PHYMEM_SIZE >> PG_BITS) - 1;
+	pfn_end = ((uint64_t)PHYMEM_SIZE >> PG_BITS);
+	printf("padding: pfn_start: %lu pfn_end : %lu\n", pfn_start, pfn_end);
 	for (i = pfn_start; i < pfn_end; i++)
 		bitmap[i/64] |= 1 << (i%64);
+
+	/* mark bitmap itself busy forever */
+	pfn_start = (uint64_t)_physfree >> PG_BITS;
+	pfn_end = pfn_start + ((BITMAP_SIZE * sizeof(uint64_t)) >> PG_BITS);
+	printf("bitmap: pfn_start: %lu pfn_end : %lu\n", pfn_start, pfn_end);
+	for (i = pfn_start; i < pfn_end; i++)
+		bitmap[i/64] |= 1 << (i%64);
+
+	/* mark initial pgtables area busy forever */
+	pgd_start = (void *)PG_ALIGN((uint64_t)_physfree + BITMAP_SIZE * sizeof(uint64_t));
+	pfn_start = (uint64_t)pgd_start >> PG_BITS;
+	pfn_end = ((uint64_t)pgd_start >> PG_BITS) + (1 + 1 + 1 + 64);
+	printf("pgtable: pfn_start: %lu pfn_end : %lu\n", pfn_start, pfn_end);
+	for (i = pfn_start; i < pfn_end; i++)
+		bitmap[i/64] |= 1 << (i%64);
+
 }
 
 void free_initmem() {
@@ -199,11 +219,7 @@ void mm_init() {
 		printf("base: 0x%lx\n", pmb_array[i].base);
 		printf("length: 0x%lx\n", pmb_array[i].length);
 	}
-//	bitmap = (uint64_t *)_physfree;
+
 	setup_bitmap();
 	setup_initial_pgtables();
-	printf("%p\n",_physbase);
-	printf("%p\n",_physfree);
-	printf("%p\n",_loaderbase);
-	printf("%p\n",_loaderend);
 }
