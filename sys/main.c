@@ -4,6 +4,14 @@
 #include <sys/pic.h>
 #include <sys/timer.h>
 #include <sys/tarfs.h>
+#include <sys/mm.h>
+
+extern phymem_block pmb_array[MAX_PHY_BLOCK];
+extern uint32_t pmb_count;
+void *_physbase;
+void *_physfree;
+void *_loaderbase;
+void *_loaderend;
 
 void start(uint32_t* modulep, void* physbase, void* physfree)
 {
@@ -14,15 +22,26 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 	while(modulep[0] != 0x9001) modulep += modulep[1]+2;
 	for(smap = (struct smap_t*)(modulep+2); smap < (struct smap_t*)((char*)modulep+modulep[1]+2*4); ++smap) {
 		if (smap->type == 1 /* memory */ && smap->length != 0) {
+			pmb_array[pmb_count].base = smap->base;
+			pmb_array[pmb_count].length = smap->length;
+			pmb_count++;
 			printf("Available Physical Memory [%x-%x]\n", smap->base, smap->base + smap->length);
 		}
 	}
 	printf("tarfs in [%p:%p]\n", &_binary_tarfs_start, &_binary_tarfs_end);
+
 	// kernel starts here
+
+	_physbase = physbase;
+	_physfree = physfree;
+	_loaderbase = (void *)pmb_array[0].base;
+	_loaderend = (void *)(pmb_array[0].base + pmb_array[0].length);
+
 	picinit();
 	timerinit();
 	kbdinit();
 	init_idt();
+	mm_init();
 	__asm volatile("sti"::);
 	printf("after init_idt\n");
 
