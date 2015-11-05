@@ -184,6 +184,7 @@ static void setup_initial_pgtables() {
 
 	/* bitmap starts at _physfree, take up 4K memory, pgd_start follows bitmap area */
 	pgd_start = (void *)PG_ALIGN((uint64_t)_physfree + BITMAP_SIZE * sizeof(uint64_t));
+	printf("pgd_start:0x%lx\n", pgd_start);
 
 	pgd = (pgd_t *)pgd_start;
 	pud = (pud_t *)((uint64_t)pgd + PG_SIZE);
@@ -196,7 +197,7 @@ static void setup_initial_pgtables() {
 	
 	/* for pud, the 1st entry and the 0x1fc entry is filled */
 	*pud = (uint64_t)pmd | PUD_P | PUD_RW | PUD_US; 
-	*(pud + 0x1fc) = (uint64_t)pmd | PUD_P | PUD_RW | PUD_US;
+	*(pud + 0x1fe) = (uint64_t)pmd | PUD_P | PUD_RW | PUD_US;
 
 	/* for pmd, the 1st to 63rd entries are all filled */
 	for (i = 0; i < PMD_T_NUM; i++)
@@ -222,4 +223,11 @@ void mm_init() {
 
 	setup_bitmap();
 	setup_initial_pgtables();
+
+	__asm__ __volatile__(
+	"movq %0, %%cr3\n\t"
+	:
+	: "b" (pgd_start)
+	:);
+
 }
