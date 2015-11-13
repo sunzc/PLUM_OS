@@ -29,29 +29,11 @@ typedef struct phymem_block {
 	uint64_t length;
 }phymem_block;
 
-
-/* TODO undefined yet, just to show some basic concept */
-struct vma {
-	void *start_addr;
-	void *end_addr;
-	struct vma *next;
-	int flag;
-};
-
-/* TODO vma_list is used to link vma struct in a circle */
-struct vma_list {
-	struct vma_list *prev;
-	struct vma_list *next;
-	struct vma *vmap;
-}
-
 /**
- * page struct to keep track of physical page, including page reference count,
- * and pointer to vma list, pointer to next free page struct.
+ * page struct to keep page ref info. bitmap is used to manage free page. 
  */
+#define PAGE_ARRAY_SIZE (PHYMEM_SIZE>>PG_BITS)
 struct page {
-	struct vma_list *vma_listp;
-	struct page *next;
 	int ref;
 };
 

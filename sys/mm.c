@@ -13,8 +13,17 @@ extern void *_physfree;
 extern void *_loaderbase;
 extern void *_loaderend;
 
+/* global page table start address */
 void *pgd_start;
+void *pgtable_end;
+
+/* bitmap start address */
 uint64_t *bitmap;
+void *bitmap_end;
+
+/* page struct array start address */
+struct page *page_array;
+void *page_array_end;
 
 void *memset(void *s, int c, size_t n) {
 	int i;
@@ -64,7 +73,7 @@ void *memset(void *s, int c, size_t n) {
 static void setup_bitmap() {
 	uint64_t i, pfn_start, pfn_end;
 
-	/* bitmap starts at _physfree, take up 32K memory */
+	/* bitmap starts at _physfree, take up 4k memory, one page */
 	bitmap = (uint64_t *)_physfree;
 
 	/* initialize array to zero */
@@ -75,6 +84,7 @@ static void setup_bitmap() {
 	pfn_start = (uint64_t)_loaderbase >> PG_BITS;
 	pfn_end = ((uint64_t)_loaderend >> PG_BITS);
 	printf("boot: pfn_start: %lu pfn_end : %lu\n", pfn_start, pfn_end);
+	printf("boot map: pfn_start: 0x%lx pfn_end : 0x%lx\n", (uint64_t)bitmap + pfn_start/8, (uint64_t)bitmap + pfn_end/8);
 	for (i = pfn_start; i < pfn_end; i++)
 		bitmap[i/64] |= 1 << (i%64);
 
@@ -82,6 +92,7 @@ static void setup_bitmap() {
 	pfn_start = (uint64_t)(pmb_array[0].base + pmb_array[0].length) >> PG_BITS;
 	pfn_end = ((uint64_t)pmb_array[1].base >> PG_BITS);
 	printf("hole: pfn_start: %lu pfn_end : %lu\n", pfn_start, pfn_end);
+	printf("hole map: pfn_start: 0x%lx pfn_end : 0x%lx\n", (uint64_t)bitmap + pfn_start/8, (uint64_t)bitmap + pfn_end/8);
 	for (i = pfn_start; i < pfn_end; i++)
 		bitmap[i/64] |= 1 << (i%64);
 
@@ -89,6 +100,7 @@ static void setup_bitmap() {
 	pfn_start = (uint64_t)_physbase >> PG_BITS;
 	pfn_end = ((uint64_t)_physfree >> PG_BITS);
 	printf("kernel: pfn_start: %lu pfn_end : %lu\n", pfn_start, pfn_end);
+	printf("kernel map: pfn_start: 0x%lx pfn_end : 0x%lx\n", (uint64_t)bitmap + pfn_start/8, (uint64_t)bitmap + pfn_end/8);
 	for (i = pfn_start; i < pfn_end; i++)
 		bitmap[i/64] |= 1 << (i%64);
 
@@ -96,13 +108,16 @@ static void setup_bitmap() {
 	pfn_start = (uint64_t)(pmb_array[pmb_count - 1].base + pmb_array[pmb_count - 1].length) >> PG_BITS;
 	pfn_end = ((uint64_t)PHYMEM_SIZE >> PG_BITS);
 	printf("padding: pfn_start: %lu pfn_end : %lu\n", pfn_start, pfn_end);
+	printf("padding map: pfn_start: 0x%lx pfn_end : 0x%lx\n", (uint64_t)bitmap + pfn_start/8, (uint64_t)bitmap + pfn_end/8);
 	for (i = pfn_start; i < pfn_end; i++)
 		bitmap[i/64] |= 1 << (i%64);
 
 	/* mark bitmap itself busy forever */
 	pfn_start = (uint64_t)_physfree >> PG_BITS;
 	pfn_end = pfn_start + ((BITMAP_SIZE * sizeof(uint64_t)) >> PG_BITS);
+	bitmap_end = (void *) (pfn_end << PG_BITS);
 	printf("bitmap: pfn_start: %lu pfn_end : %lu\n", pfn_start, pfn_end);
+	printf("bitmap map: pfn_start: 0x%lx pfn_end : 0x%lx\n", (uint64_t)bitmap + pfn_start/8, (uint64_t)bitmap + pfn_end/8);
 	for (i = pfn_start; i < pfn_end; i++)
 		bitmap[i/64] |= 1 << (i%64);
 
@@ -110,10 +125,21 @@ static void setup_bitmap() {
 	pgd_start = (void *)PG_ALIGN((uint64_t)_physfree + BITMAP_SIZE * sizeof(uint64_t));
 	pfn_start = (uint64_t)pgd_start >> PG_BITS;
 	pfn_end = ((uint64_t)pgd_start >> PG_BITS) + (1 + 1 + 1 + 64);
+	pgtable_end = (void *)(pfn_end << PG_BITS);
 	printf("pgtable: pfn_start: %lu pfn_end : %lu\n", pfn_start, pfn_end);
+	printf("pgtable map: pfn_start: 0x%lx pfn_end : 0x%lx\n", (uint64_t)bitmap + pfn_start/8, (uint64_t)bitmap + pfn_end/8);
 	for (i = pfn_start; i < pfn_end; i++)
 		bitmap[i/64] |= 1 << (i%64);
 
+	/* mark page array area busy forever */
+	page_array = (struct page *) pgtable_end;
+	pfn_start = (uint64_t)page_array >> PG_BITS;
+	pfn_end = pfn_start + (PG_ALIGN(PAGE_ARRAY_SIZE * sizeof(struct page)) >> PG_BITS);
+	page_array_end = (void *)(pfn_end << PG_BITS);
+	printf("page array: pfn_start: %lu pfn_end : %lu\n", pfn_start, pfn_end);
+	printf("page array map: pfn_start: 0x%lx pfn_end : 0x%lx\n", (uint64_t)bitmap + pfn_start/8, (uint64_t)bitmap + pfn_end/8);
+	for (i = pfn_start; i < pfn_end; i++)
+		bitmap[i/64] |= 1 << (i%64);
 }
 
 void free_initmem() {
@@ -211,6 +237,19 @@ static void setup_initial_pgtables() {
 	}
 }
 
+static void setup_page_array() {
+	int i, j;
+
+	for (i = 0; i < BITMAP_SIZE; i++) {
+		for (j = 0; j < 64; j++) {
+			if (bitmap[i] & (1<<j))
+				(page_array + (i * 64 + j))->ref= 1;
+			else
+				(page_array + (i * 64 + j))->ref= 0;
+		}
+	}
+}
+
 void mm_init() {
 	int i;
 
@@ -223,7 +262,9 @@ void mm_init() {
 
 	setup_bitmap();
 	setup_initial_pgtables();
+	setup_page_array();
 
+	/* switch to kernel own page tables */
 	__asm__ __volatile__(
 	"movq %0, %%cr3\n\t"
 	:
