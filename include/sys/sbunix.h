@@ -19,4 +19,10 @@ static inline uint8_t inb(uint16_t port) {
 	__asm volatile("in %1, %0": "=a" (data): "d" (port));
 	return data;
 }
+
+static inline void panic(char *msg) {
+	printf("%s",msg);
+	while(1);
+}
+
 #endif

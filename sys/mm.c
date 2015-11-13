@@ -147,9 +147,13 @@ void free_initmem() {
 
 	/* free bootloader mem after set up kernel own page table */
 	pfn_start = (uint64_t)_loaderbase >> PG_BITS;
-	pfn_end = ((uint64_t)_loaderend >> PG_BITS) - 1;
-	for (i = pfn_start; i < pfn_end; i++)
+	pfn_end = ((uint64_t)_loaderend >> PG_BITS);
+	printf("free initmem: pfn_start: %lu pfn_end : %lu\n", pfn_start, pfn_end);
+	printf("free initmem map: pfn_start: 0x%lx pfn_end : 0x%lx\n", (uint64_t)bitmap + pfn_start/8, (uint64_t)bitmap + pfn_end/8);
+	for (i = pfn_start; i < pfn_end; i++) {
 		bitmap[i/64] &= ~(1 << (i%64));
+		(page_array + i)->ref = 0;
+	}
 }
 
 /**
@@ -250,8 +254,71 @@ static void setup_page_array() {
 	}
 }
 
+uint64_t get_free_page() {
+	uint64_t bf_pfn_start = 0;
+	uint64_t bf_pfn_end = 159; 
+	uint64_t bkf_pfn_start = 256;
+	uint64_t bkf_pfn_end = 512;
+	uint64_t normal_pfn_start = 671;
+	uint64_t normal_pfn_end = 32766;
+
+	uint64_t pfn = 0;
+
+	/* search boot area for free pages */
+	for (pfn = bf_pfn_start; pfn < bf_pfn_end; pfn++) {
+		if ((page_array + pfn)->ref == 0) {
+			/* mark page_array 1 */
+			(page_array + pfn)->ref = 1;
+
+			/* mark bitmap busy */
+			bitmap[pfn/64] |= 1 << (pfn%64);
+
+			return pfn;
+		}
+	}
+
+	/* search before kernel image area for free pages */
+	for (pfn = bkf_pfn_start; pfn < bkf_pfn_end; pfn++) {
+		if ((page_array + pfn)->ref == 0) {
+			/* mark page_array 1 */
+			(page_array + pfn)->ref = 1;
+
+			/* mark bitmap busy */
+			bitmap[pfn/64] |= 1 << (pfn%64);
+
+			return pfn;
+		}
+	}
+
+	/* search boot area for free pages */
+	for (pfn = normal_pfn_start; pfn < normal_pfn_end; pfn++) {
+		if ((page_array + pfn)->ref == 0) {
+			/* mark page_array 1 */
+			(page_array + pfn)->ref = 1;
+
+			/* mark bitmap busy */
+			bitmap[pfn/64] |= 1 << (pfn%64);
+
+			return pfn;
+		}
+	}
+
+	panic("[get_free_page] ERROR : out of memory!");
+	return -1;
+}
+
+void free_page(uint64_t pfn) {
+	/* page ref count - 1 */
+	(page_array + pfn)->ref -= 1;
+
+	/* if page ref equals 0, free it in bitmap */
+	if ((page_array + pfn)->ref == 0)
+		bitmap[pfn/64] &= ~(1 << (pfn%64));
+}
+
 void mm_init() {
-	int i;
+	int i, j;
+	uint64_t pfn;
 
 	printf("mm_init()\n");
 
@@ -263,6 +330,17 @@ void mm_init() {
 	setup_bitmap();
 	setup_initial_pgtables();
 	setup_page_array();
+	free_initmem();
+
+	/* test get_free_page */
+	printf("test get_free_page:\n");
+	for (i = 0; i < 20; i++) {
+		for (j = 0; j < 10; j++) {
+			pfn = get_free_page();
+			printf("%lu   ",pfn);
+		}
+		printf("\n");
+	}
 
 	/* switch to kernel own page tables */
 	__asm__ __volatile__(

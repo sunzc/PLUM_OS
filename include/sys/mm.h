@@ -39,5 +39,7 @@ struct page {
 
 void *memset(void *s, int c, size_t n);
 void mm_init();
+uint64_t get_free_page();
+void free_page(uint64_t pfn);
 
 #endif
