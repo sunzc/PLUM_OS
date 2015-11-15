@@ -12,12 +12,13 @@
  */
 #define PG_BITS 	(12)
 #define PG_SIZE		(1 << PG_BITS)	/* 4K */
+#define STACK_SIZE	PG_SIZE
 #define PHYMEM_SIZE	(1<<27) /* 128M, acutal size is less than it, it's aligned size */
 #define BITMAP_SIZE	((PHYMEM_SIZE >> PG_BITS) >> 6) /* one bit per page, one uint64_t contains 64 bits*/
 
 /* vitual address to physical address */
-#define VA2PA(addr)	(addr - 0xffffffff80000000)
-#define PA2VA(addr)	(addr + 0xffffffff80000000)
+#define VA2PA(addr)	((addr) - 0xffffffff80000000)
+#define PA2VA(addr)	((addr) + 0xffffffff80000000)
 
 /* align addr in page size */
 #define PG_ALIGN(addr) (((uint64_t)addr + PG_SIZE - 1) & (~(PG_SIZE - 1)))

@@ -1,9 +1,9 @@
-#ifndef _MM_H
-#define _MM_H
+#ifndef _PROC_H
+#define _PROC_H
 
 #include <sys/defs.h>
 
-typedef struct task_struct{
+typedef struct __attribute__((__packed__))  task_struct{
 	struct task_struct *prev;
 	struct task_struct *next;
 	struct task_struct *last;
@@ -12,7 +12,7 @@ typedef struct task_struct{
 	void (*func)(void);
 }task_struct;
 
-typedef struct context_info{
+typedef struct __attribute__((__packed__))  context_info{
 	uint64_t rcx;	
 	uint64_t rax;
 	uint64_t rflags;	
@@ -30,5 +30,10 @@ typedef struct context_info{
 	uint64_t rbx;
 }context_info;
 
-void __switch_to(task_struct *me, task_struct *next, task_struct **last);
+//void __switch_to(void);
+task_struct * __switch_to(task_struct *me, task_struct *next, task_struct **last);
+void schedule(void);
+void init_proc(void);
+int kernel_thread(void (*f)(void));
+
 #endif

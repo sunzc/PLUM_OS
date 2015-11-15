@@ -311,7 +311,9 @@ void *get_zero_page() {
 	uint64_t pfn;
 	void *page;
 
-	pfn = get_free_page();
+	if ((pfn = get_free_page()) == -1)
+		return NULL;
+	
 
 	page = (void *)PA2VA(pfn<<PG_BITS);
 
@@ -330,8 +332,7 @@ void free_page(uint64_t pfn) {
 }
 
 void mm_init() {
-	int i, j;
-	uint64_t pfn;
+	int i;
 
 	printf("mm_init()\n");
 
@@ -344,16 +345,6 @@ void mm_init() {
 	setup_initial_pgtables();
 	setup_page_array();
 	free_initmem();
-
-	/* test get_free_page */
-	printf("test get_free_page:\n");
-	for (i = 0; i < 20; i++) {
-		for (j = 0; j < 10; j++) {
-			pfn = get_free_page();
-			printf("%lu   ",pfn);
-		}
-		printf("\n");
-	}
 
 	/* switch to kernel own page tables */
 	__asm__ __volatile__(

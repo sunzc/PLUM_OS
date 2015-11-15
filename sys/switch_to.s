@@ -21,17 +21,17 @@ __switch_to:
 	pushq %r13
 	pushq %r14
 	pushq %r15
-	pushq %rflags
+	pushfq
 	pushq %rax /* ptr to me on mystack */
 	pushq %rcx /* ptr to local last (&last) */
 
-	movq %rsp, %rax(24) /* save my stack ptr */
-	movq %rbx(24), %rsp /* swtich to next stack */
+	movq %rsp, 0x18(%rax) /* save my stack ptr */
+	movq 0x18(%rbx), %rsp /* swtich to next stack */
 
 	popq %rcx /* get next's ptr to &last */
 	movq %rax, (%rcx) /* store rax in &last */
 	popq %rax /* update me (rax) to new stack */
-	popq %rflags
+	popfq
 	popq %r15
 	popq %r14
 	popq %r13

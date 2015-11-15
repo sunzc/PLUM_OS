@@ -5,6 +5,7 @@
 #include <sys/timer.h>
 #include <sys/tarfs.h>
 #include <sys/mm.h>
+#include <sys/proc.h>
 
 extern phymem_block pmb_array[MAX_PHY_BLOCK];
 extern uint32_t pmb_count;
@@ -12,6 +13,9 @@ void *_physbase;
 void *_physfree;
 void *_loaderbase;
 void *_loaderend;
+
+void thread_A(void);
+void thread_B(void);
 
 void start(uint32_t* modulep, void* physbase, void* physfree)
 {
@@ -42,10 +46,32 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 	kbdinit();
 	init_idt();
 	mm_init();
-	__asm volatile("sti"::);
+	/* keep interrupt closing to test context switch */
+	//__asm volatile("sti"::);
+	init_proc();
+	kernel_thread(thread_A);
+	kernel_thread(thread_B);
+	while(1) {
+		printf("I'm the init process\n");
+		schedule();
+	}
 	printf("after init_idt\n");
 
 	while(1);
+}
+
+void thread_A() {
+	while(1) {
+		printf("I'm thread_A\n");
+		schedule();
+	}
+}
+
+void thread_B() {
+	while(1) {
+		printf("I'm thread_B\n");
+		schedule();
+	}
 }
 
 #define INITIAL_STACK_SIZE 4096
