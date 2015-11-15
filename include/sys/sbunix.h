@@ -25,4 +25,11 @@ static inline void panic(char *msg) {
 	while(1);
 }
 
+#define assert(cond) do {                                  \
+                if (!(cond)) {                             \
+                        printf("assert fail in %s, at line %d\n",__func__, __LINE__);     \
+			while(1);				\
+                }                                               \
+        } while (0)
+
 #endif
