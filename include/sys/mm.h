@@ -16,8 +16,8 @@
 #define BITMAP_SIZE	((PHYMEM_SIZE >> PG_BITS) >> 6) /* one bit per page, one uint64_t contains 64 bits*/
 
 /* vitual address to physical address */
-#define VA2PA(addr)	(addr - 0xffffffff00000000)
-#define PA2VA(addr)	(addr + 0xffffffff00000000)
+#define VA2PA(addr)	(addr - 0xffffffff80000000)
+#define PA2VA(addr)	(addr + 0xffffffff80000000)
 
 /* align addr in page size */
 #define PG_ALIGN(addr) (((uint64_t)addr + PG_SIZE - 1) & (~(PG_SIZE - 1)))
@@ -40,6 +40,7 @@ struct page {
 void *memset(void *s, int c, size_t n);
 void mm_init();
 uint64_t get_free_page();
+void *get_zero_page();
 void free_page(uint64_t pfn);
 
 #endif
