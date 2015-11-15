@@ -307,6 +307,19 @@ uint64_t get_free_page() {
 	return -1;
 }
 
+void *get_zero_page() {
+	uint64_t pfn;
+	void *page;
+
+	pfn = get_free_page();
+
+	page = (void *)PA2VA(pfn<<PG_BITS);
+
+	memset(page, 0, PG_SIZE);
+
+	return page;
+}
+
 void free_page(uint64_t pfn) {
 	/* page ref count - 1 */
 	(page_array + pfn)->ref -= 1;
