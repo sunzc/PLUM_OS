@@ -63,6 +63,8 @@ void schedule() {
 
 	//__switch_to(me, next, &me->last);
 	switch_to(me, next, &me->last);
+ 	__asm volatile("sti"::);
+
 }
 
 static task_struct * switch_to(task_struct *me, task_struct *next, task_struct **last) {
@@ -73,6 +75,7 @@ static task_struct * switch_to(task_struct *me, task_struct *next, task_struct *
 		"callq __switch_to;"
 	:
 	:"m"(me),"m"(next),"m"(last)
+	:"%rax","%rbx","%rcx"
 	);		
 
 	return me;

@@ -1,4 +1,5 @@
 #include <sys/sbunix.h>
+#include <sys/proc.h>
 #include <sys/pic.h>
 
 static int sec = 0;

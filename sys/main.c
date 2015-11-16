@@ -47,13 +47,13 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 	init_idt();
 	mm_init();
 	/* keep interrupt closing to test context switch */
-	//__asm volatile("sti"::);
 	init_proc();
 	kernel_thread(thread_A);
 	kernel_thread(thread_B);
+	__asm volatile("sti"::);
 	while(1) {
 		printf("I'm the init process\n");
-		schedule();
+//		schedule();
 	}
 	printf("after init_idt\n");
 
@@ -63,14 +63,14 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 void thread_A() {
 	while(1) {
 		printf("I'm thread_A\n");
-		schedule();
+//		schedule();
 	}
 }
 
 void thread_B() {
 	while(1) {
 		printf("I'm thread_B\n");
-		schedule();
+//		schedule();
 	}
 }
 
