@@ -63,7 +63,7 @@ void schedule() {
 
 	//__switch_to(me, next, &me->last);
 	switch_to(me, next, &me->last);
- 	__asm volatile("sti"::);
+ 	//__asm volatile("sti"::);
 
 }
 
