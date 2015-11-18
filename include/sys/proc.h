@@ -28,6 +28,7 @@ typedef struct __attribute__((__packed__))  context_info{
 	uint64_t rsi;
 	uint64_t rdx;
 	uint64_t rbx;
+	uint64_t rbp;
 }context_info;
 
 //void __switch_to(void);

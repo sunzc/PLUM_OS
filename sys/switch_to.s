@@ -9,6 +9,7 @@
  * rcx: &last
  */
 __switch_to:
+	pushq %rbp
 	pushq %rbx
 	pushq %rdx
 	pushq %rsi
@@ -44,4 +45,5 @@ __switch_to:
 	popq %rsi
 	popq %rdx
 	popq %rbx
+	popq %rbp
 	retq
