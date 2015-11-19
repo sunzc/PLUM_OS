@@ -50,12 +50,14 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 	init_proc();
 	kernel_thread(thread_A);
 	kernel_thread(thread_B);
+	init_tarfs();
+	test_tarfs();
 //	__asm volatile("sti"::);
-	while(1) {
+/*	while(1) {
 		printf("I'm the init process\n");
 		schedule();
 	}
-	printf("after init_idt\n");
+*/	printf("after init_idt\n");
 
 	while(1);
 }

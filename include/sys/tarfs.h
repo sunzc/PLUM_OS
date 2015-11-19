@@ -1,6 +1,18 @@
 #ifndef _TARFS_H
 #define _TARFS_H
 
+typedef struct tarfs_file{
+	char mode[16];
+	int free;
+	void *start_addr;
+	uint64_t size;
+	uint64_t pos;	
+}tarfs_file;
+
+#define MAX_TARFS_FILE	20
+#define START_FD	3	/* skip 0, 1, 2 on purpose */
+#define TARFS_HEADER	512
+
 extern char _binary_tarfs_start;
 extern char _binary_tarfs_end;
 
@@ -23,5 +35,11 @@ struct posix_header_ustar {
 	char prefix[155];
 	char pad[12];
 };
+
+void init_tarfs(void);
+int tarfs_open(char *filename, char *mode);
+void *tarfs_read(int fd, uint64_t size);
+void tarfs_close(int fd);
+void test_tarfs();
 
 #endif
