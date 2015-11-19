@@ -2,7 +2,7 @@
 #include <sys/string.h>
 #include <sys/tarfs.h>
 
-
+#define ROUND_TO_512(n) ((n+512) & ~(512 - 1))
 tarfs_file tarfs_file_array[MAX_TARFS_FILE];
 
 static void show_tarfs_header(struct posix_header_ustar *p);
@@ -20,13 +20,11 @@ void init_tarfs() {
 	/* show some info about tarfs content */
 	p = (void *)&_binary_tarfs_start;
 	show_tarfs_header((struct posix_header_ustar *)p);
-	//show_tarfs_header((struct posix_header_ustar *)(p + TARFS_HEADER));
 }
 
 void test_tarfs() {
 	int i, fd;
 	void *buf;
-	//char *filename="bin/.nfs00000000040d4b0900000008";
 	char *filename="boot/beastie.4th";
 
 	if ((fd = tarfs_open(filename,"r")) == -1) {
@@ -48,6 +46,7 @@ void test_tarfs() {
 	
 	return;
 }
+
 static void zero_tarfs_file_entry(tarfs_file entry) {
 	entry.mode[0] = '\0';
 	entry.free = 0;
@@ -69,24 +68,16 @@ int tarfs_open(char *filename, char *mode) {
 	while (p < (void *)&_binary_tarfs_end) {
 		/* skip directory */
 		if (((struct posix_header_ustar *)p)->typeflag[0] == '5') {
-		//	printf("directory: %s\n", ((struct posix_header_ustar *)p)->name);
-			show_tarfs_header((struct posix_header_ustar *)p);
 			p += TARFS_HEADER;
 			continue;
 		}
 
 		/* handle file */
 		if (strcmp(((struct posix_header_ustar *)p)->name, filename) != 0) {
-			printf("skip file: %s\n", ((struct posix_header_ustar *)p)->name);
-			show_tarfs_header((struct posix_header_ustar *)p);
 			len = get_filesz((struct posix_header_ustar *)p) + TARFS_HEADER;
-			printf("len = 0x%lx, p:0x%lx\n", len, p);
-			p += len;
-			printf("len = 0x%lx, p:0x%lx\n", len, p);
+			p += ROUND_TO_512(len);
 			continue;
 		} else {
-			printf("find file: %s\n", ((struct posix_header_ustar *)p)->name);
-			show_tarfs_header((struct posix_header_ustar *)p);
 			res = p;
 			break;
 		}
@@ -100,7 +91,7 @@ int tarfs_open(char *filename, char *mode) {
 			tarfs_file_array[i].free = 1;
 			assert(strlen(mode) < 16);
 			strncpy(tarfs_file_array[i].mode, mode, strlen(mode));
-			tarfs_file_array[i].size = get_filesz(res);
+			tarfs_file_array[i].size = ROUND_TO_512(get_filesz(res));
 			tarfs_file_array[i].start_addr = res + TARFS_HEADER;
 			return i;
 		}
@@ -163,6 +154,5 @@ static uint64_t octstr_to_int(char *size_str) {
 		i++;
 	}
 
-	printf("[in octstr_to_int] octstr:%s size:%d\n", size_str, size);
 	return size;
 }
