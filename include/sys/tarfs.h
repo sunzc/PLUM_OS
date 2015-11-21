@@ -9,6 +9,8 @@ typedef struct tarfs_file{
 	uint64_t pos;	
 }tarfs_file;
 
+typedef tarfs_file file;
+
 #define MAX_TARFS_FILE	20
 #define START_FD	3	/* skip 0, 1, 2 on purpose */
 #define TARFS_HEADER	512
