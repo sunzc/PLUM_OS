@@ -2,6 +2,8 @@
 #define _MM_H
 
 #include <sys/defs.h>
+#include <sys/pgtable.h>
+#include <sys/tarfs.h>
 
 /**
  * bitmap for physical memory bookkeeping, note: bitmap occupies only 1 page.
@@ -38,10 +40,40 @@ struct page {
 	int ref;
 };
 
+typedef struct __attribute__((__packed__)) vm_area_struct {
+	struct vm_area_struct *next;
+
+	/* start -- end, prot*/
+	uint64_t vm_start;
+	uint64_t vm_end; /* first address after vma, why?TODO */
+	uint64_t prot;
+
+	/* backing file info */
+	uint64_t vm_pgoff;
+	file *vm_file;
+}vma_struct;
+
+/**
+ * mm_struct contains a pointer to process vma list.
+ */
+typedef struct __attribute__((__packed__)) mm_struct {
+	struct vm_area_struct *mmap;
+
+	/* pgd points to the page global directory */
+	pgd_t *pgd;
+
+	/* statistic info */
+	int mm_count;
+	uint64_t highest_vm_end;
+}mm_struct;
+
 void *memset(void *s, int c, size_t n);
 void mm_init();
 uint64_t get_free_page();
 void *get_zero_page();
 void free_page(uint64_t pfn);
+void map_vma(struct vm_area_struct *, pgd_t *);
+pgd_t *alloc_pgd();
+void copy_page(void *dest_page, void *src_page);
 
 #endif

@@ -179,31 +179,6 @@ void free_initmem() {
  *      47    3938   3029   2019   1211          0
  */
 
-typedef uint64_t pgd_t;
-typedef uint64_t pud_t;
-typedef uint64_t pmd_t;
-typedef uint64_t pte_t;
-
-#define PGD_P		(1)
-#define PGD_RW		(1<<1)
-#define PGD_US		(1<<2)
-
-#define PUD_P		(1)
-#define PUD_RW		(1<<1)
-#define PUD_US		(1<<2)
-
-#define PMD_P		(1)
-#define PMD_RW		(1<<1)
-#define PMD_US		(1<<2)
-
-#define PTE_P		(1)
-#define PTE_RW		(1<<1)
-#define PTE_US		(1<<2)
-
-#define PMD_BITS		21
-
-#define PMD_T_NUM		64	/* the entries number of pmd */
-#define PTE_T_NUM		512	/* PTE entires number per page */
 
 static void setup_initial_pgtables() {
 	int i, j;
@@ -353,4 +328,33 @@ void mm_init() {
 	: "b" (pgd_start)
 	:);
 
+}
+
+/* copy page byte by byte */
+void copy_page(void *dest_page, void *src_page) {
+	int i;
+
+	for (i = 0; i < PG_SIZE; i++)
+		*(dest_page + i) = *(src_page + i);
+}
+
+/**
+ * alloc_pgd return a pgd pointer, which is a copy of the kernel page global directory.
+ * Note:
+ *	pgd stores the physical address!
+ */
+pgd_t *alloc_pgd() {
+	void *p;
+
+	if ((p = get_zero_page()) == NULL)
+		return NULL;
+
+	copy_page(p, PA2VA(pgd_start));
+
+	return (pgd_t *)VA2PA(p); 
+}
+
+/* now we set up page tables for user process, the original mapping for low address should be cancelled first */
+void map_vma(struct vm_area_struct *vma, pgd_t *pgd) {
+	//TODO	
 }

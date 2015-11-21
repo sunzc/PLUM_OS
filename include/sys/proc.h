@@ -2,13 +2,22 @@
 #define _PROC_H
 
 #include <sys/defs.h>
+#include <sys/mm.h>
 
 typedef struct __attribute__((__packed__))  task_struct{
 	struct task_struct *prev;
 	struct task_struct *next;
 	struct task_struct *last;
+
+	/* mm_struct descripe the user process vm structures */
+	struct mm_struct *mm;
+
 	void *kernel_stack;
+
+	/* only increase */
 	int pid;
+
+	/* points to kernel thread function */
 	void (*func)(void);
 }task_struct;
 
