@@ -25,7 +25,7 @@ void init_tarfs() {
 void test_tarfs() {
 	int i, fd;
 	void *buf;
-	char *filename="boot/beastie.4th";
+	char *filename="bin/hello";
 
 	if ((fd = tarfs_open(filename,"r")) == -1) {
 		printf("file not found!\n");

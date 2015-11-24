@@ -7,7 +7,7 @@
 #define MAX_COLUMN 	80
 #define MAX_ROW		25
 
-#define VGA_BUFFER_ADDR 0xb8000;
+#define VGA_BUFFER_ADDR 0xffffffff800b8000;
 
 typedef unsigned long uint64_t;
 typedef uint64_t size_t;

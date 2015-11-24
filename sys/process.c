@@ -1,4 +1,5 @@
 #include <sys/sbunix.h>
+#include <sys/gdt.h>
 #include <sys/mm.h>
 #include <sys/proc.h>
 #include <sys/tarfs.h>
@@ -8,12 +9,15 @@
 task_struct *task_headp = NULL;
 task_struct *current = NULL;
 extern tarfs_file* tarfs_file_array;
+extern void *pgd_start;
+extern void __ret_to_user(void *user_stack, void *user_entry);
 
 /* current highest pid number */
 int pid_count = 0;
 
 static task_struct * select_task_struct(void);
 static task_struct * switch_to(task_struct *, task_struct *, task_struct **);
+static uint64_t map_pflags_to_vmprot(uint32_t p_flags);
 
 void init_proc() {
 	task_headp =(task_struct *) get_zero_page();
@@ -118,6 +122,12 @@ void exec(char *filename) {
 	int i, fd;
 	void *fp;
 
+	/* future kernel stack */
+	void *future_kstack, *sp;
+	int argc;
+	char *argv, *envp;
+	
+
 	/* vma struct */
 	struct vm_area_struct *vma, *vmap;
 
@@ -127,10 +137,11 @@ void exec(char *filename) {
 	int phnum, phentsize;
 
 	/* fields that inside a program header */
+	uint32_t p_type;
 	uint32_t p_flags;
 	uint64_t p_offset;
 	uint64_t p_vaddr;
-	uint64_t p_paddr;
+//	uint64_t p_paddr;
 	uint64_t p_filesz;
 	uint64_t p_memsz;
 	uint64_t p_align;
@@ -148,9 +159,19 @@ void exec(char *filename) {
 
 	/* initialize the mm_struct */
 	current->mm->mmap = NULL;
+	current->mm->entry = ((Elf64_Ehdr *)fp)->e_entry;
 	current->mm->pgd = alloc_pgd();
 	current->mm->mm_count = 0;
 	current->mm->highest_vm_end = 0;
+	current->mm->code_start = 0;
+	current->mm->code_end = 0;
+	current->mm->data_start = 0;
+	current->mm->data_end = 0;
+	/* toppest user address */
+	current->mm->user_stack = 0x7ffffffffffc;
+	/* will be adjusted later, should be the lowest userable address above .text .data segments */
+	current->mm->user_heap = 0;
+
 
 	/* generally, we read one segment from elf_binary, and setup the related vma for it! */
 
@@ -165,17 +186,40 @@ void exec(char *filename) {
 
 	/* handle each program header */
 	for (i = 0; i < phnum; i++) {
-		/* skip none loadable segment, do not consider PT_INTERP, for we don't support dynamic loader */
-		if (((Elf64_Phdr *)ph)->p_type != PT_LOAD)
-			continue;
-
+		/* read program header */
+		p_type	= ((Elf64_Phdr *)ph)->p_type;
 		p_flags	= ((Elf64_Phdr *)ph)->p_flags;
 		p_offset= ((Elf64_Phdr *)ph)->p_offset;
 		p_vaddr = ((Elf64_Phdr *)ph)->p_vaddr;
-		p_paddr = ((Elf64_Phdr *)ph)->p_paddr;
+//		p_paddr = ((Elf64_Phdr *)ph)->p_paddr;
 		p_filesz= ((Elf64_Phdr *)ph)->p_filesz;
 		p_memsz	= ((Elf64_Phdr *)ph)->p_memsz;
 		p_align	= ((Elf64_Phdr *)ph)->p_align;
+
+		/* skip none loadable segment, do not consider PT_INTERP, for we don't support dynamic loader */
+		if (p_type != PT_LOAD)
+			continue;
+
+		/**
+		 * We assume the 1st program header is the only one text segment, 
+		 * the 2rd program header is the only one data segment(if exists).
+		 * Our assumation based on the following:
+		 *	1. it's a elf file
+		 *	2. it's a statically linked executable.
+		 */
+
+		/* we have already checked p_type, only PT_LOAD can go through here */
+		if (i == 0 && p_flags == (PF_R + PF_X)) {
+			/* 1st seg should be text seg, p_flags equals (PF_R + PF_X = 5) */
+			current->mm->code_start = p_vaddr;
+			current->mm->code_end = p_vaddr + p_memsz;
+		}
+
+		if (i == 1 && p_flags == (PF_R + PF_W)) {
+			/* 2rd seg should be code seg, p_flags equals (PF_R + PF_W = 6) */
+			current->mm->data_start = p_vaddr;
+			current->mm->data_end = p_vaddr + p_memsz;
+		}
 
 		vma = (struct vm_area_struct *)get_zero_page();
 		if (vma == NULL)
@@ -184,8 +228,10 @@ void exec(char *filename) {
 			vma->next = NULL;
 			vma->vm_start = p_vaddr;
 			vma->vm_end = p_vaddr + p_memsz;
-			vma->prot = (uint64_t)p_flags;
+			vma->prot = map_pflags_to_vmprot(p_flags);
 			vma->vm_pgoff = p_offset;
+			vma->vm_filesz = p_filesz;
+			vma->vm_align = p_align;
 			vma->vm_file = &tarfs_file_array[fd];
 		}
 
@@ -199,9 +245,157 @@ void exec(char *filename) {
 			vmap->next = vma;
 		}
 
-		/* map current vma into memory */
-		map_vma(vma, current->mm->pgd);
+			/* map current vma into memory */
 
-		ph += phentsize;		
+		/**
+		 * a bit tricky here, we use the kernel pgd_start for loading user process to avoid
+		 * switch mm, should be fixed later  TODO
+		 */
+//		map_vma(vma, current->mm->pgd);
+		map_vma(vma, pgd_start);
+
+		ph += phentsize;
 	}
+
+	/**
+	 * Adjust user heap:
+	 * 	if elf has data segment, heap should be right after data_end, 
+	 * 	otherwise, user has no data segment, heap should be after code_end
+	 */
+	if (current->mm->data_end != 0)
+		current->mm->user_heap = PG_ALIGN(current->mm->data_end);
+	else
+		current->mm->user_heap = PG_ALIGN(current->mm->code_end);
+
+	/**
+	 * we haven't setup mappings for stack and heap. they are different from code & data segment
+	 * they don't have back file.
+	 */
+
+	/* insert vma for heap */
+	vma = (struct vm_area_struct *)get_zero_page();
+	if (vma == NULL)
+		panic("[exec] ERROR: vma alloc failed!");
+	else {
+		vma->next = NULL;
+		vma->vm_start = current->mm->user_heap;
+		vma->vm_end = vma->vm_start + PG_SIZE; /* initial 4K */
+		vma->prot = PTE_RW;
+		vma->vm_pgoff = 0;
+		vma->vm_filesz = 0;
+		vma->vm_align = PG_SIZE;
+		vma->vm_file = NULL;
+	}
+
+	/* insert current vma at the tail, assume segment are put in increasing order */
+	if (current->mm->mmap == NULL)
+		current->mm->mmap = vma;
+	else {
+		vmap = current->mm->mmap;
+		while(vmap->next != NULL)
+			vmap  = vmap->next;
+		vmap->next = vma;
+	}
+
+	/* reuse pgd_start temperarily TODO */
+	map_vma(vma, pgd_start);
+
+	/* insert vma for stack */
+	vma = (struct vm_area_struct *)get_zero_page();
+	if (vma == NULL)
+		panic("[exec] ERROR: vma alloc failed!");
+	else {
+		vma->next = NULL;
+		vma->vm_start = current->mm->user_stack & ~(PG_SIZE - 1);
+		vma->vm_end = vma->vm_start + PG_SIZE; /* initial 4K */
+		vma->prot = PTE_RW;
+		vma->vm_pgoff = 0;
+		vma->vm_filesz = 0;
+		vma->vm_align = PG_SIZE;
+		vma->vm_file = NULL;
+	}
+
+	/* insert current vma at the tail, assume segment are put in increasing order */
+	if (current->mm->mmap == NULL)
+		current->mm->mmap = vma;
+	else {
+		vmap = current->mm->mmap;
+		while(vmap->next != NULL)
+			vmap  = vmap->next;
+		vmap->next = vma;
+	}
+
+	/* reuse pgd_start temperarily TODO */
+	map_vma(vma, pgd_start);
+
+	/**
+	 *  fake the user stack, make it look like this:
+	 *     ________
+	 *  0 |        |
+	 *  c |        |
+	 *  8 |  envp  |
+	 *  4 |        |
+	 *  0 |  NULL  |
+	 *  c |        |
+	 *  8 |  argv  |
+	 *  4 |        |
+	 *  0 |  argc  |
+	 *     --------
+	 */
+
+	sp = (void *)(current->mm->user_stack);
+	sp = (void *)((uint64_t)sp & ~0xf);
+	argv = sp - 0x10;
+	*(char *)argv = 't';
+	*(char *)(argv + 1) = 'e';
+	*(char *)(argv + 2) = 's';
+	*(char *)(argv + 3) = 't';
+	*(char *)argv = '\0';
+	envp = NULL; 
+	argc = 1;
+	sp = sp - 0x20;
+	*(int *)sp = argc;
+	*(char **)(sp + 8) = argv;
+	*(char **)(sp + 16) = NULL;
+	*(char **)(sp + 24) = envp;
+	current->mm->user_stack = (uint64_t)sp;
+	
+
+	/**
+	 * Before we return to user, we should set tss.rsp0 to a given kernel stack,
+	 * that's the stack when we fall back to kernel, we should use. Now we want use
+	 * the current stack, but when we fall back to kernel, we should be at the top
+	 * of the stack, pretending it's the first time we fall down to kernel.
+	 */
+	if ((future_kstack = get_zero_page()) == NULL)
+		panic("[exec]ERROR: alloc future_kstack failed!");
+
+	future_kstack = future_kstack + PG_SIZE - 4;
+	tss.rsp0 = (uint64_t)future_kstack;
+
+	/* everything is ready, now we return to user */
+	__ret_to_user((void *)(current->mm->user_stack), (void *)(current->mm->entry));
+}
+
+static uint64_t map_pflags_to_vmprot(uint32_t p_flags) {
+	uint64_t prot = 0;
+
+	/* refer to ELF Segment Permissions documentation */
+	switch(p_flags) {
+		case 0:	/* should deny all access, but don't know how to express it TODO */
+			break;
+		case 1:
+		case 4:
+		case 5:
+			/* read and execute only */
+			break;
+		case 2:
+		case 3:
+		case 6:
+		case 7:
+			/* read, write and execute */
+			prot |= PTE_RW;
+	}
+
+	return prot;
 }

@@ -74,7 +74,7 @@ static void setup_bitmap() {
 	uint64_t i, pfn_start, pfn_end;
 
 	/* bitmap starts at _physfree, take up 4k memory, one page */
-	bitmap = (uint64_t *)_physfree;
+	bitmap = (uint64_t *)(_physfree);
 
 	/* initialize array to zero */
 	for (i = 0; i < BITMAP_SIZE; i++)
@@ -197,11 +197,11 @@ static void setup_initial_pgtables() {
 	pte = (pte_t *)((uint64_t)pmd + PG_SIZE);
 
 	/* for pgd, only the 1st entry and the last entry is filled, they point to the pud, which is pgd + 1 page */
-	*pgd = (uint64_t)pud | PGD_P | PGD_RW | PGD_US;
+	//*pgd = (uint64_t)pud | PGD_P | PGD_RW | PGD_US;
 	*(pgd + 0x1ff) = (uint64_t)pud | PGD_P | PGD_RW | PGD_US;
 	
 	/* for pud, the 1st entry and the 0x1fc entry is filled */
-	*pud = (uint64_t)pmd | PUD_P | PUD_RW | PUD_US; 
+	//*pud = (uint64_t)pmd | PUD_P | PUD_RW | PUD_US; 
 	*(pud + 0x1fe) = (uint64_t)pmd | PUD_P | PUD_RW | PUD_US;
 
 	/* for pmd, the 1st to 63rd entries are all filled */
@@ -306,6 +306,21 @@ void free_page(uint64_t pfn) {
 		bitmap[pfn/64] &= ~(1 << (pfn%64));
 }
 
+/* we use too much physical address for convenience, now we need to give up it! */
+static void move_vaddr() {
+	pgd_start = (void *)PA2VA((char *)pgd_start);
+	pgtable_end = (void *)PA2VA((char *)pgtable_end);
+
+	/* bitmap start address */
+	bitmap = (uint64_t *)PA2VA((char *)bitmap);
+	bitmap_end = (void *)PA2VA((char *)bitmap_end);
+
+	/* page struct array start address */
+	page_array = (struct page *)PA2VA((char *)page_array);
+	page_array_end = (void *)PA2VA((char *)page_array_end);
+	
+}
+
 void mm_init() {
 	int i;
 
@@ -320,12 +335,13 @@ void mm_init() {
 	setup_initial_pgtables();
 	setup_page_array();
 	free_initmem();
+	move_vaddr();
 
 	/* switch to kernel own page tables */
 	__asm__ __volatile__(
 	"movq %0, %%cr3\n\t"
 	:
-	: "b" (pgd_start)
+	: "b" (VA2PA(pgd_start))
 	:);
 
 }
@@ -335,13 +351,13 @@ void copy_page(void *dest_page, void *src_page) {
 	int i;
 
 	for (i = 0; i < PG_SIZE; i++)
-		*(dest_page + i) = *(src_page + i);
+		*(char *)(dest_page + i) = *(char *)(src_page + i);
 }
 
 /**
  * alloc_pgd return a pgd pointer, which is a copy of the kernel page global directory.
  * Note:
- *	pgd stores the physical address!
+ *	pgd stores the virtual address, only change to physical address when use.
  */
 pgd_t *alloc_pgd() {
 	void *p;
@@ -349,12 +365,95 @@ pgd_t *alloc_pgd() {
 	if ((p = get_zero_page()) == NULL)
 		return NULL;
 
-	copy_page(p, PA2VA(pgd_start));
+	copy_page(p, pgd_start);
 
-	return (pgd_t *)VA2PA(p); 
+	return (pgd_t *)(p); 
 }
 
 /* now we set up page tables for user process, the original mapping for low address should be cancelled first */
 void map_vma(struct vm_area_struct *vma, pgd_t *pgd) {
-	//TODO	
+	uint64_t i;
+	int pgd_off, pud_off, pmd_off, pte_off;
+	void *pud, *pmd, *pte, *pg_frame;
+	char *usrp, *fp;
+
+	uint64_t start_addr = vma->vm_start;
+	uint64_t end_addr = vma->vm_end;
+	uint64_t prot = vma->prot;
+
+	uint64_t pfn_start = start_addr >> PG_BITS;
+	uint64_t pfn_end = (end_addr - 1) >> PG_BITS;
+
+	for(i = pfn_start; i <= pfn_end; i++) {
+
+		/* alloc pud */
+		pgd_off = get_pgd_off(i);
+		if (get_pgd_entry(pgd, pgd_off) == 0) {
+			if ((pud = get_zero_page()) == NULL)
+				panic("[map_vma]ERROR: alloc pud error!");
+
+			put_pgd_entry(pgd, pgd_off, pud, PGD_P | PGD_RW); 
+		} else
+			pud = (void *)((uint64_t)PA2VA(get_pgd_entry(pgd, pgd_off)) & ~(PG_SIZE - 1));
+
+		/* alloc pmd */
+		pud_off = get_pud_off(i);
+		if (get_pud_entry(pud, pud_off)) {
+			if ((pmd = get_zero_page()) == NULL)
+				panic("[map_vma]ERROR: alloc pmd error!");
+			put_pud_entry(pud, pud_off, pmd, PUD_P | PUD_RW); 
+		} else
+			pmd = (void *)((uint64_t)PA2VA(get_pud_entry(pud, pud_off)) & ~(PG_SIZE - 1));
+
+		/* alloc pte */
+		pmd_off = get_pmd_off(i);		
+		if (get_pmd_entry(pmd, pmd_off)) {
+			if ((pte = get_zero_page()) == NULL)
+				panic("[map_vma]ERROR: alloc pte error!");
+			put_pmd_entry(pmd, pmd_off, pte, PMD_P | PMD_RW); 
+		} else
+			pte = (void *)((uint64_t)PA2VA(get_pmd_entry(pmd, pmd_off)) & ~(PG_SIZE - 1));
+
+		/* alloc page */
+		pte_off = get_pte_off(i);		
+		if (get_pte_entry(pte, pte_off)) {
+			if ((pg_frame = get_zero_page()) == NULL)
+				panic("[map_vma]ERROR: alloc page frame error!");
+			/* in case this segment is readonly, so set it rw first and change PROT after load data */
+			put_pte_entry(pte, pte_off, pg_frame, PTE_P | PTE_RW);
+		}
+	}
+
+	/**
+	 * load file to user memory
+	 * suppose here the pgd is the current pgd, after setup page tables we can access those user memory afterwards.
+	 */
+
+	/* if this vma is for stack or heap, that means it doesn't have back file, we are done! */
+	if (vma->vm_file == NULL)
+		return;
+
+	/* locate file pointer to vm_pgoff of vm_file */
+	fp = (char *) (vma->vm_file->start_addr + vma->vm_pgoff);
+
+	/* locate user memory pointer to vm_start */
+	usrp = (char *) (vma->vm_start);
+
+	/* copy data from file to user memory */
+	for (i = 0; i < vma->vm_filesz; i++)
+		*(usrp + i) = *(fp + i);
+
+	/* change page entry PROT permentally */
+	for (i = pfn_start; i <= pfn_end; i++) {
+		pgd_off = get_pgd_off(i);
+		pud = (void *)((uint64_t)PA2VA(get_pgd_entry(pgd, pgd_off)) & ~(PG_SIZE - 1));
+		pud_off = get_pud_off(i);
+		pmd = (void *)((uint64_t)PA2VA(get_pud_entry(pud, pud_off)) & ~(PG_SIZE - 1));
+		pmd_off = get_pmd_off(i);		
+		pte = (void *)((uint64_t)PA2VA(get_pmd_entry(pmd, pmd_off)) & ~(PG_SIZE - 1));
+		pte_off = get_pte_off(i);
+		pg_frame = (void *)((uint64_t)PA2VA(get_pte_entry(pte, pte_off)) & ~(PG_SIZE - 1));
+		put_pte_entry(pte, pte_off, pg_frame, PTE_P | prot);
+	}
 }
+

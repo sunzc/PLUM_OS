@@ -19,11 +19,11 @@
 #define BITMAP_SIZE	((PHYMEM_SIZE >> PG_BITS) >> 6) /* one bit per page, one uint64_t contains 64 bits*/
 
 /* vitual address to physical address */
-#define VA2PA(addr)	((addr) - 0xffffffff80000000)
-#define PA2VA(addr)	((addr) + 0xffffffff80000000)
+#define VA2PA(addr)	(((void *)(addr)) - 0xffffffff80000000)
+#define PA2VA(addr)	(((void *)(addr)) + 0xffffffff80000000)
 
 /* align addr in page size */
-#define PG_ALIGN(addr) (((uint64_t)addr + PG_SIZE - 1) & (~(PG_SIZE - 1)))
+#define PG_ALIGN(addr) (((uint64_t)(addr) + PG_SIZE - 1) & (~(PG_SIZE - 1)))
 
 /* bookeeping available physical memory block */
 #define MAX_PHY_BLOCK	5
@@ -50,6 +50,8 @@ typedef struct __attribute__((__packed__)) vm_area_struct {
 
 	/* backing file info */
 	uint64_t vm_pgoff;
+	uint64_t vm_filesz;
+	uint64_t vm_align; 
 	file *vm_file;
 }vma_struct;
 
@@ -59,8 +61,16 @@ typedef struct __attribute__((__packed__)) vm_area_struct {
 typedef struct __attribute__((__packed__)) mm_struct {
 	struct vm_area_struct *mmap;
 
+	/* elf e_entry, which records the start address of execution */
+	uint64_t entry;
+
 	/* pgd points to the page global directory */
 	pgd_t *pgd;
+
+	/* we need to know the follow for user stack, heap, brk management */
+	uint64_t code_start, code_end;
+	uint64_t data_start, data_end;
+	uint64_t user_stack, user_heap;
 
 	/* statistic info */
 	int mm_count;
