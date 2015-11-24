@@ -33,10 +33,10 @@ typedef uint64_t pte_t;
 #define PTE_T_NUM		512	/* PTE entires number per page */
 
 /* get pxd_offset from pfn */
-#define get_pgd_off(pfn)	((int)(pfn>>27))
-#define get_pud_off(pfn)	((int)((pfn<<9)>>27))
-#define get_pmd_off(pfn)	((int)((pfn<<18)>>27))
-#define get_pte_off(pfn)	((int)((pfn<<27)>>27))
+#define get_pgd_off(pfn)	((int)((pfn<<28)>>(27+28)))
+#define get_pud_off(pfn)	((int)((pfn<<(9+28))>>(27+28)))
+#define get_pmd_off(pfn)	((int)((pfn<<(18+28))>>(27+28)))
+#define get_pte_off(pfn)	((int)((pfn<<(27+28))>>(27+28)))
 
 /* operate on pgtable entries */
 #define put_pgd_entry(pgd, pgd_off, pud, prot)	\

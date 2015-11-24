@@ -232,7 +232,7 @@ void exec(char *filename) {
 			vma->vm_pgoff = p_offset;
 			vma->vm_filesz = p_filesz;
 			vma->vm_align = p_align;
-			vma->vm_file = &tarfs_file_array[fd];
+			vma->vm_file = (file *)&tarfs_file_array + fd;
 		}
 
 		if (current->mm->mmap == NULL)
@@ -346,18 +346,19 @@ void exec(char *filename) {
 	sp = (void *)(current->mm->user_stack);
 	sp = (void *)((uint64_t)sp & ~0xf);
 	argv = sp - 0x10;
-	*(char *)argv = 't';
-	*(char *)(argv + 1) = 'e';
-	*(char *)(argv + 2) = 's';
-	*(char *)(argv + 3) = 't';
-	*(char *)argv = '\0';
+	sp = sp - 0x10;
+	*argv = 't';
+	*(argv + 1) = 'e';
+	*(argv + 2) = 's';
+	*(argv + 3) = 't';
+	*(argv + 4) = '\0';
 	envp = NULL; 
 	argc = 1;
 	sp = sp - 0x20;
 	*(int *)sp = argc;
-	*(char **)(sp + 8) = argv;
-	*(char **)(sp + 16) = NULL;
-	*(char **)(sp + 24) = envp;
+	*(uint64_t *)(sp + 8) = (uint64_t)argv;
+	*(uint64_t *)(sp + 16) = (uint64_t)0;
+	*(uint64_t *)(sp + 24) = (uint64_t)envp;
 	current->mm->user_stack = (uint64_t)sp;
 	
 

@@ -198,21 +198,21 @@ static void setup_initial_pgtables() {
 
 	/* for pgd, only the 1st entry and the last entry is filled, they point to the pud, which is pgd + 1 page */
 	//*pgd = (uint64_t)pud | PGD_P | PGD_RW | PGD_US;
-	*(pgd + 0x1ff) = (uint64_t)pud | PGD_P | PGD_RW | PGD_US;
+	*(pgd + 0x1ff) = (uint64_t)pud | PGD_P | PGD_RW;
 	
 	/* for pud, the 1st entry and the 0x1fc entry is filled */
 	//*pud = (uint64_t)pmd | PUD_P | PUD_RW | PUD_US; 
-	*(pud + 0x1fe) = (uint64_t)pmd | PUD_P | PUD_RW | PUD_US;
+	*(pud + 0x1fe) = (uint64_t)pmd | PUD_P | PUD_RW;
 
 	/* for pmd, the 1st to 63rd entries are all filled */
 	for (i = 0; i < PMD_T_NUM; i++)
-		*(pmd + i) = ((uint64_t)pte + (i << PG_BITS))| PMD_P | PMD_RW | PMD_US;
+		*(pmd + i) = ((uint64_t)pte + (i << PG_BITS))| PMD_P | PMD_RW;
 
 	/* for pte, we need to fill each page with concret physical pages */
 	for (i = 0; i < PTE_T_NUM; i++) {
 		ptep = (pte_t *)((uint64_t)pte + (i << PG_BITS));
 		for (j = 0; j < 512; j++)
-			*(ptep + j) = ((i << PMD_BITS) + (j << PG_BITS)) | PTE_P | PTE_RW | PTE_US;
+			*(ptep + j) = ((i << PMD_BITS) + (j << PG_BITS)) | PTE_P | PTE_RW;
 	}
 }
 
@@ -392,35 +392,35 @@ void map_vma(struct vm_area_struct *vma, pgd_t *pgd) {
 			if ((pud = get_zero_page()) == NULL)
 				panic("[map_vma]ERROR: alloc pud error!");
 
-			put_pgd_entry(pgd, pgd_off, pud, PGD_P | PGD_RW); 
+			put_pgd_entry(pgd, pgd_off, pud, PGD_P | PGD_RW | PGD_US); 
 		} else
 			pud = (void *)((uint64_t)PA2VA(get_pgd_entry(pgd, pgd_off)) & ~(PG_SIZE - 1));
 
 		/* alloc pmd */
 		pud_off = get_pud_off(i);
-		if (get_pud_entry(pud, pud_off)) {
+		if (get_pud_entry(pud, pud_off) == 0) {
 			if ((pmd = get_zero_page()) == NULL)
 				panic("[map_vma]ERROR: alloc pmd error!");
-			put_pud_entry(pud, pud_off, pmd, PUD_P | PUD_RW); 
+			put_pud_entry(pud, pud_off, pmd, PUD_P | PUD_RW | PUD_US); 
 		} else
 			pmd = (void *)((uint64_t)PA2VA(get_pud_entry(pud, pud_off)) & ~(PG_SIZE - 1));
 
 		/* alloc pte */
 		pmd_off = get_pmd_off(i);		
-		if (get_pmd_entry(pmd, pmd_off)) {
+		if (get_pmd_entry(pmd, pmd_off) == 0) {
 			if ((pte = get_zero_page()) == NULL)
 				panic("[map_vma]ERROR: alloc pte error!");
-			put_pmd_entry(pmd, pmd_off, pte, PMD_P | PMD_RW); 
+			put_pmd_entry(pmd, pmd_off, pte, PMD_P | PMD_RW | PMD_US); 
 		} else
 			pte = (void *)((uint64_t)PA2VA(get_pmd_entry(pmd, pmd_off)) & ~(PG_SIZE - 1));
 
 		/* alloc page */
 		pte_off = get_pte_off(i);		
-		if (get_pte_entry(pte, pte_off)) {
+		if (get_pte_entry(pte, pte_off) == 0) {
 			if ((pg_frame = get_zero_page()) == NULL)
 				panic("[map_vma]ERROR: alloc page frame error!");
 			/* in case this segment is readonly, so set it rw first and change PROT after load data */
-			put_pte_entry(pte, pte_off, pg_frame, PTE_P | PTE_RW);
+			put_pte_entry(pte, pte_off, pg_frame, PTE_P | PTE_RW | PTE_US);
 		}
 	}
 
@@ -453,7 +453,7 @@ void map_vma(struct vm_area_struct *vma, pgd_t *pgd) {
 		pte = (void *)((uint64_t)PA2VA(get_pmd_entry(pmd, pmd_off)) & ~(PG_SIZE - 1));
 		pte_off = get_pte_off(i);
 		pg_frame = (void *)((uint64_t)PA2VA(get_pte_entry(pte, pte_off)) & ~(PG_SIZE - 1));
-		put_pte_entry(pte, pte_off, pg_frame, PTE_P | prot);
+		put_pte_entry(pte, pte_off, pg_frame, PTE_P | prot | PTE_US);
 	}
 }
 
