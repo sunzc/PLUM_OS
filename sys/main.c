@@ -52,6 +52,7 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 	kernel_thread(thread_B);
 	init_tarfs();
 	test_tarfs();
+	exec("bin/hello");
 //	__asm volatile("sti"::);
 /*	while(1) {
 		printf("I'm the init process\n");

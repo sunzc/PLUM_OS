@@ -104,6 +104,7 @@ int tarfs_open(char *filename, char *mode) {
 void * tarfs_read(int fd, uint64_t size) {
 	void *p;
 
+	printf("[tarfs_read]fd = %d\n", fd);
 	assert(fd >= START_FD && fd < MAX_TARFS_FILE);
 	assert(tarfs_file_array[fd].free > 0);
 	assert(tarfs_file_array[fd].pos + size <= tarfs_file_array[fd].size);

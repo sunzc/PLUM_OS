@@ -45,5 +45,6 @@ task_struct * __switch_to(task_struct *me, task_struct *next, task_struct **last
 void schedule(void);
 void init_proc(void);
 int kernel_thread(void (*f)(void));
+void exec(char *);
 
 #endif
