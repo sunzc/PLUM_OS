@@ -30,7 +30,8 @@ void _start(void) {
 	while(*pe!=NULL)
 		printf("%s\n", *pe++);
 
-*/	brk((void*)0);
+*/
+//	brk((void*)0);
 	res = main(argc, argv, envp);
 
 
