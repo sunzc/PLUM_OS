@@ -306,8 +306,8 @@ void exec(char *filename) {
 		panic("[exec] ERROR: vma alloc failed!");
 	else {
 		vma->next = NULL;
-		vma->vm_start = current->mm->user_stack & ~(PG_SIZE - 1);
-		vma->vm_end = vma->vm_start + PG_SIZE; /* initial 4K */
+		vma->vm_start = (current->mm->user_stack & ~(PG_SIZE - 1)) - PG_SIZE;
+		vma->vm_end = vma->vm_start + (2 * PG_SIZE); /* initial 4K*10 */
 		vma->prot = PTE_RW;
 		vma->vm_pgoff = 0;
 		vma->vm_filesz = 0;
