@@ -2,7 +2,10 @@
 #include <sys/string.h>
 #include <sys/tarfs.h>
 
-#define ROUND_TO_512(n) ((n+512) & ~(512 - 1))
+//open DEBUG_TARFS to print info about read or open
+#define DEBUG_TARFS
+
+#define ROUND_TO_512(n) ((n + 512 - 1) & ~(512 - 1))
 tarfs_file tarfs_file_array[MAX_TARFS_FILE];
 
 static void show_tarfs_header(struct posix_header_ustar *p);
@@ -68,6 +71,9 @@ int tarfs_open(char *filename, char *mode) {
 	while (p < (void *)&_binary_tarfs_end) {
 		/* skip directory */
 		if (((struct posix_header_ustar *)p)->typeflag[0] == '5') {
+#ifdef DEBUG_TARFS
+			show_tarfs_header((struct posix_header_ustar *)p);
+#endif
 			p += TARFS_HEADER;
 			continue;
 		}
@@ -75,14 +81,21 @@ int tarfs_open(char *filename, char *mode) {
 		/* handle file */
 		if (strcmp(((struct posix_header_ustar *)p)->name, filename) != 0) {
 			len = get_filesz((struct posix_header_ustar *)p) + TARFS_HEADER;
+#ifdef DEBUG_TARFS
+			show_tarfs_header((struct posix_header_ustar *)p);
+			printf("[open] file size :0x%lx, after round_to_512: 0x%lx\n", len, ROUND_TO_512(len));
+#endif
 			p += ROUND_TO_512(len);
 			continue;
 		} else {
+#ifdef DEBUG_TARFS
+			show_tarfs_header((struct posix_header_ustar *)p);
+#endif
 			res = p;
 			break;
 		}
-	}	
-	
+	}
+
 	if (res == NULL)
 		return -1;
 
@@ -155,5 +168,8 @@ static uint64_t octstr_to_int(char *size_str) {
 		i++;
 	}
 
+#ifdef DEBUG_TARFS
+	printf("[octstr_to_int] size_string:%s, size:0x%lx\n", size_str, size);
+#endif
 	return size;
 }
