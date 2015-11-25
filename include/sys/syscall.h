@@ -10,6 +10,7 @@
 #define SYS_wait4      61
 #define SYS_nanosleep  35
 #define SYS_alarm      37
+#define SYS_kill       62
 #define SYS_getcwd     79
 #define SYS_chdir      80
 #define SYS_open        2
@@ -21,5 +22,7 @@
 #define SYS_dup        32
 #define SYS_dup2       33
 #define SYS_getdents   78
+#define SYS_rt_sigaction	13
+#define SYS_rt_sigreturn	15
 
 #endif
