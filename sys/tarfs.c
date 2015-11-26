@@ -3,7 +3,7 @@
 #include <sys/tarfs.h>
 
 //open DEBUG_TARFS to print info about read or open
-#define DEBUG_TARFS
+//#define DEBUG_TARFS
 
 #define ROUND_TO_512(n) ((n + 512 - 1) & ~(512 - 1))
 tarfs_file tarfs_file_array[MAX_TARFS_FILE];

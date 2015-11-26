@@ -6,6 +6,7 @@
 #include <sys/tarfs.h>
 #include <sys/mm.h>
 #include <sys/proc.h>
+#include <sys/syscall.h>
 
 extern phymem_block pmb_array[MAX_PHY_BLOCK];
 extern uint32_t pmb_count;
@@ -52,6 +53,7 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 	kernel_thread(thread_B);
 	init_tarfs();
 	test_tarfs();
+	init_syscall();
 	exec("bin/hello");
 //	__asm volatile("sti"::);
 /*	while(1) {

@@ -25,4 +25,10 @@
 #define SYS_rt_sigaction	13
 #define SYS_rt_sigreturn	15
 
+#define IA32_EFER		0xC0000080
+#define IA32_STAR		0xC0000081
+#define IA32_LSTAR		0xC0000082
+#define IA32_FMASK		0xC0000084
+
+void init_syscall(void);
 #endif

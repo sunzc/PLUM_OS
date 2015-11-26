@@ -15,7 +15,10 @@
 #define P             (0x00800000000000)  /*** present ***/
 #define L             (0x20000000000000)  /*** long mode ***/
 #define D             (0x40000000000000)  /*** default op size ***/
+#define GR            (0x80000000000000)  /*** granularity, 0:Byte, 1:Page ***/
 #define W             (0x00020000000000)  /*** writable data segment ***/
+#define LO_LIMIT      (0x0000000000ffff)  /*** low limit ***/
+#define HI_LIMIT      (0x0f000000000000)  /*** high limit ***/
 
 struct sys_segment_descriptor {
 	uint64_t sd_lolimit:16;/* segment extent (lsb) */
@@ -33,12 +36,14 @@ struct sys_segment_descriptor {
 }__attribute__((packed));
 
 uint64_t gdt[MAX_GDT] = {
-	0,                      /*** NULL descriptor ***/
-	GDT_CS | P | DPL0 | L,  /*** kernel code segment descriptor ***/
-	GDT_DS | P | W | DPL0,  /*** kernel data segment descriptor ***/
-	GDT_CS | P | DPL3 | L,  /*** user code segment descriptor ***/
-	GDT_DS | P | W | DPL3,  /*** user data segment descriptor ***/
-	0, 0,                   /*** TSS ***/
+	0,                              			/*** NULL descriptor ***/
+	GDT_CS | P | DPL0 | L | LO_LIMIT | HI_LIMIT | GR,	/*** kernel code segment descriptor ***/
+	GDT_DS | P | W | DPL0 | LO_LIMIT | HI_LIMIT | GR,	/*** kernel data segment descriptor ***/
+	GDT_CS | P | DPL3 | L | LO_LIMIT | HI_LIMIT | GR,	/*** user code segment descriptor ***/
+	GDT_DS | P | W | DPL3 | LO_LIMIT | HI_LIMIT | GR,	/*** user data segment descriptor ***/
+	0, 0,                 			    		/*** TSS ***/
+	GDT_CS | P | DPL3 | L | LO_LIMIT | HI_LIMIT | GR,	/*** sysret user code segment descriptor ***/
+	GDT_DS | P | W | DPL3 | LO_LIMIT | HI_LIMIT | GR,	/*** sysret user data segment descriptor ***/
 };
 
 struct gdtr_t {
