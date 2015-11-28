@@ -1,9 +1,9 @@
 #include <sys/sbunix.h>
 #include <sys/gdt.h>
-#include <sys/mm.h>
 #include <sys/proc.h>
 #include <sys/tarfs.h>
 #include <sys/elf.h>
+#include <sys/string.h>
 
 /* task struct are linked in a double-linked list, task_headp points to the head */
 task_struct *task_headp = NULL;
@@ -27,6 +27,7 @@ void init_proc() {
 
 	/* pid keep growing */
 	task_headp->pid = pid_count++;
+	strncpy(task_headp->name, "init", 4);
 
 	/* mm_struct describe vm structure of user process, kernel thread 's mm is NULL */
 	task_headp->mm = NULL;
@@ -39,7 +40,7 @@ void init_proc() {
 	current = task_headp;
 }
 
-int kernel_thread(void (*f)(void)) {
+int kernel_thread(void (*f)(void), char *thread_name) {
 	task_struct *tsp;
 
 	if ((tsp = (task_struct *)get_zero_page()) == NULL)
@@ -47,6 +48,10 @@ int kernel_thread(void (*f)(void)) {
 
 	/* initialize the task struct */
 	tsp->pid = pid_count++;
+	if (thread_name != NULL)
+		strncpy(tsp->name, thread_name, strlen(thread_name));
+	else
+		strncpy(tsp->name, "anonimous process", 20);
 	tsp->func = f;
 	if ((tsp->kernel_stack = get_zero_page()) == NULL)
 		return -1;
@@ -171,6 +176,8 @@ void exec(char *filename) {
 	/* will be adjusted later, should be the lowest userable address above .text .data segments */
 	current->mm->user_heap = 0;
 
+	/* Even we do not have a context switch, we have to do switch_mm to go to new address space */
+	switch_mm(NULL, current);
 
 	/* generally, we read one segment from elf_binary, and setup the related vma for it! */
 
@@ -244,14 +251,8 @@ void exec(char *filename) {
 			vmap->next = vma;
 		}
 
-			/* map current vma into memory */
-
-		/**
-		 * a bit tricky here, we use the kernel pgd_start for loading user process to avoid
-		 * switch mm, should be fixed later  TODO
-		 */
-//		map_vma(vma, current->mm->pgd);
-		map_vma(vma, pgd_start);
+		/* map current vma into memory */
+		map_vma(vma, current->mm->pgd);
 
 		ph += phentsize;
 	}
@@ -297,7 +298,7 @@ void exec(char *filename) {
 	}
 
 	/* reuse pgd_start temperarily TODO */
-	map_vma(vma, pgd_start);
+	map_vma(vma, current->mm->pgd);
 
 	/* insert vma for stack */
 	vma = (struct vm_area_struct *)get_zero_page();
@@ -325,7 +326,7 @@ void exec(char *filename) {
 	}
 
 	/* reuse pgd_start temperarily TODO */
-	map_vma(vma, pgd_start);
+	map_vma(vma, current->mm->pgd);
 
 	/**
 	 *  fake the user stack, make it look like this:

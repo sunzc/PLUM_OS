@@ -1,5 +1,5 @@
 #include <sys/sbunix.h>
-#include <sys/mm.h>
+#include <sys/proc.h>
 
 /* available physical memory block */
 phymem_block pmb_array[MAX_PHY_BLOCK];
@@ -344,6 +344,19 @@ void mm_init() {
 	: "b" (VA2PA(pgd_start))
 	:);
 
+}
+
+void switch_mm(task_struct *prev, task_struct *next) {
+	/* switch to a user process's address space */
+	assert(next->mm != NULL);
+
+	if(prev != next) {
+		__asm__ __volatile__(
+		"movq %0, %%cr3\n\t"
+		:
+		: "b" (VA2PA(next->mm->pgd))
+		:);
+	}
 }
 
 /* copy page byte by byte */

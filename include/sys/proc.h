@@ -5,12 +5,16 @@
 #include <sys/mm.h>
 #include <sys/tarfs.h>
 
-#define MAX_FILE_NUM	20
+#define MAX_FILE_NUM		20
+#define THREAD_NAME_SIZE	100
 
 typedef struct __attribute__((__packed__))  task_struct{
 	struct task_struct *prev;
 	struct task_struct *next;
 	struct task_struct *last;
+
+
+	void *kernel_stack;
 
 	/* file array keep track of opened files */
 	file file_array[MAX_FILE_NUM];
@@ -18,10 +22,9 @@ typedef struct __attribute__((__packed__))  task_struct{
 	/* mm_struct descripe the user process vm structures */
 	struct mm_struct *mm;
 
-	void *kernel_stack;
-
 	/* only increase */
 	int pid;
+	char name[THREAD_NAME_SIZE];
 
 	/* points to kernel thread function */
 	void (*func)(void);
@@ -50,7 +53,8 @@ typedef struct __attribute__((__packed__))  context_info{
 task_struct * __switch_to(task_struct *me, task_struct *next, task_struct **last);
 void schedule(void);
 void init_proc(void);
-int kernel_thread(void (*f)(void));
+int kernel_thread(void (*f)(void), char *thread_name);
 void exec(char *);
+void switch_mm(task_struct *prev, task_struct *next);
 
 #endif

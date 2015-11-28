@@ -4,12 +4,13 @@
 #include <sys/pic.h>
 #include <sys/timer.h>
 #include <sys/tarfs.h>
-#include <sys/mm.h>
 #include <sys/proc.h>
 #include <sys/syscall.h>
 
 extern phymem_block pmb_array[MAX_PHY_BLOCK];
 extern uint32_t pmb_count;
+extern task_struct *current;
+
 void *_physbase;
 void *_physfree;
 void *_loaderbase;
@@ -17,6 +18,7 @@ void *_loaderend;
 
 void thread_A(void);
 void thread_B(void);
+void run_init_process(void);
 
 void start(uint32_t* modulep, void* physbase, void* physfree)
 {
@@ -49,20 +51,27 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 	mm_init();
 	/* keep interrupt closing to test context switch */
 	init_proc();
-	kernel_thread(thread_A);
-	kernel_thread(thread_B);
+	//kernel_thread(thread_A);
+	//kernel_thread(thread_B);
 	init_tarfs();
-	test_tarfs();
+//	test_tarfs();
 	init_syscall();
-	exec("bin/hello");
 //	__asm volatile("sti"::);
 /*	while(1) {
 		printf("I'm the init process\n");
 		schedule();
 	}
-*/	printf("after init_idt\n");
+*/
+	kernel_thread(run_init_process, "init_process");
+	schedule();
 
+	printf("[main]ERROR:should not be here!\n");
 	while(1);
+}
+
+void run_init_process() {
+	printf("process name: %s\n", current->name);
+	exec("bin/hello");
 }
 
 void thread_A() {
