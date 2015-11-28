@@ -43,18 +43,13 @@ void cpu_set_msr(uint32_t msr, uint32_t lo, uint32_t hi) {
 void init_syscall() {
 	uint32_t lo, hi, msr;
 	
-
-	printf("[init_syscall]\n");
-
 	/* first test if the processor support syscall/sysret or not */
 	msr = cpu_has_msr();
-	printf("[init_syscall]msr:%d\n", msr);
 	if (!msr)
 		panic("cpu doesn't support MSR!");
 
 	/* enable syscall by setting EFER :SysCallEnable bit */
 	cpu_get_msr(IA32_EFER, &lo, &hi);
-	printf("[init_syscall] get MSR:IA32_EFER lo:0x%x hi:0x%x, lstar:0x%x%x\n",lo,hi,hi,lo);
 
 	lo = lo | 1;
 	cpu_set_msr(IA32_EFER, lo, hi);

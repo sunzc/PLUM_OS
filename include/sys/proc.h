@@ -3,11 +3,17 @@
 
 #include <sys/defs.h>
 #include <sys/mm.h>
+#include <sys/tarfs.h>
+
+#define MAX_FILE_NUM	20
 
 typedef struct __attribute__((__packed__))  task_struct{
 	struct task_struct *prev;
 	struct task_struct *next;
 	struct task_struct *last;
+
+	/* file array keep track of opened files */
+	file file_array[MAX_FILE_NUM];
 
 	/* mm_struct descripe the user process vm structures */
 	struct mm_struct *mm;

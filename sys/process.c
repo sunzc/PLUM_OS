@@ -8,7 +8,6 @@
 /* task struct are linked in a double-linked list, task_headp points to the head */
 task_struct *task_headp = NULL;
 task_struct *current = NULL;
-extern tarfs_file* tarfs_file_array;
 extern void *pgd_start;
 extern void __ret_to_user(void *user_stack, void *user_entry);
 
@@ -232,7 +231,7 @@ void exec(char *filename) {
 			vma->vm_pgoff = p_offset;
 			vma->vm_filesz = p_filesz;
 			vma->vm_align = p_align;
-			vma->vm_file = (file *)&tarfs_file_array + fd;
+			vma->vm_file = (file *)&(current->file_array) + fd;
 		}
 
 		if (current->mm->mmap == NULL)
