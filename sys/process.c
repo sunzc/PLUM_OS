@@ -374,6 +374,9 @@ void exec(char *filename) {
 	future_kstack = future_kstack + PG_SIZE - 4;
 	tss.rsp0 = (uint64_t)future_kstack;
 
+	/* set kernel stack, so that when syscall/interrupt happen, we will use that stack */
+	current->kernel_stack = future_kstack;
+
 	/* everything is ready, now we return to user */
 	__ret_to_user((void *)(current->mm->user_stack), (void *)(current->mm->entry));
 }
