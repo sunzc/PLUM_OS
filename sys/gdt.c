@@ -72,4 +72,12 @@ void setup_tss() {
 	sd->sd_hilimit = 0;
 	sd->sd_gran = 0;
 	sd->sd_hibase = ((uint64_t)&tss) >> 24;
+
+	/* tell Task Register TSS's index in GDT */
+	__asm volatile( "mov $0x28,%%ax;"
+			"ltr %%ax;"
+			:
+			:
+			:"%rax"
+			);
 }

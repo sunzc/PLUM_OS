@@ -114,12 +114,9 @@ static task_struct * select_task_struct(void) {
 
 /**
  * exec the first user process/
- * 	1. load elf_binary into memory and build corresponding vm_struct.
+ * 	1. load elf_binary into memory(not really, demand-paging) and build corresponding vm_struct.
  *	2  set_up page tables for the user process.
  *	3. ret_to_user to start execute.
- *
- *	Demand paging seems to be easier, but need to handle page fault, that's bad.
- *	Let's avoid demand paging(loading) first, and map all the pages during this.
  */
 
 void exec(char *filename) {
@@ -145,7 +142,6 @@ void exec(char *filename) {
 	uint32_t p_flags;
 	uint64_t p_offset;
 	uint64_t p_vaddr;
-//	uint64_t p_paddr;
 	uint64_t p_filesz;
 	uint64_t p_memsz;
 	uint64_t p_align;
@@ -197,7 +193,6 @@ void exec(char *filename) {
 		p_flags	= ((Elf64_Phdr *)ph)->p_flags;
 		p_offset= ((Elf64_Phdr *)ph)->p_offset;
 		p_vaddr = ((Elf64_Phdr *)ph)->p_vaddr;
-//		p_paddr = ((Elf64_Phdr *)ph)->p_paddr;
 		p_filesz= ((Elf64_Phdr *)ph)->p_filesz;
 		p_memsz	= ((Elf64_Phdr *)ph)->p_memsz;
 		p_align	= ((Elf64_Phdr *)ph)->p_align;
@@ -251,9 +246,6 @@ void exec(char *filename) {
 			vmap->next = vma;
 		}
 
-		/* map current vma into memory */
-		map_vma(vma, current->mm->pgd);
-
 		ph += phentsize;
 	}
 
@@ -297,17 +289,14 @@ void exec(char *filename) {
 		vmap->next = vma;
 	}
 
-	/* reuse pgd_start temperarily TODO */
-	map_vma(vma, current->mm->pgd);
-
 	/* insert vma for stack */
 	vma = (struct vm_area_struct *)get_zero_page();
 	if (vma == NULL)
 		panic("[exec] ERROR: vma alloc failed!");
 	else {
 		vma->next = NULL;
-		vma->vm_start = (current->mm->user_stack & ~(PG_SIZE - 1)) - PG_SIZE;
-		vma->vm_end = vma->vm_start + (2 * PG_SIZE); /* initial 4K*10 */
+		vma->vm_end = (current->mm->user_stack & ~(PG_SIZE - 1)) + PG_SIZE;
+		vma->vm_start = vma->vm_end - (0x10 * PG_SIZE); /* stack limit 0x10 * 4K */
 		vma->prot = PTE_RW;
 		vma->vm_pgoff = 0;
 		vma->vm_filesz = 0;
@@ -324,9 +313,6 @@ void exec(char *filename) {
 			vmap  = vmap->next;
 		vmap->next = vma;
 	}
-
-	/* reuse pgd_start temperarily TODO */
-	map_vma(vma, current->mm->pgd);
 
 	/**
 	 *  fake the user stack, make it look like this:
@@ -345,6 +331,7 @@ void exec(char *filename) {
 
 	sp = (void *)(current->mm->user_stack);
 	sp = (void *)((uint64_t)sp & ~0xf);
+	map_a_page(vma, (uint64_t)sp);
 	argv = sp - 0x10;
 	sp = sp - 0x10;
 	*argv = 't';
@@ -360,7 +347,6 @@ void exec(char *filename) {
 	*(uint64_t *)(sp + 16) = (uint64_t)0;
 	*(uint64_t *)(sp + 24) = (uint64_t)envp;
 	current->mm->user_stack = (uint64_t)sp;
-	
 
 	/**
 	 * Before we return to user, we should set tss.rsp0 to a given kernel stack,
@@ -371,7 +357,7 @@ void exec(char *filename) {
 	if ((future_kstack = get_zero_page()) == NULL)
 		panic("[exec]ERROR: alloc future_kstack failed!");
 
-	future_kstack = future_kstack + PG_SIZE - 4;
+	future_kstack = future_kstack + PG_SIZE;
 	tss.rsp0 = (uint64_t)future_kstack;
 
 	/* set kernel stack, so that when syscall/interrupt happen, we will use that stack */

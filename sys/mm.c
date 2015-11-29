@@ -1,6 +1,8 @@
 #include <sys/sbunix.h>
 #include <sys/proc.h>
 
+extern task_struct *current;
+
 /* available physical memory block */
 phymem_block pmb_array[MAX_PHY_BLOCK];
 uint32_t pmb_count = 0;
@@ -428,7 +430,7 @@ void map_vma(struct vm_area_struct *vma, pgd_t *pgd) {
 			pte = (void *)((uint64_t)PA2VA(get_pmd_entry(pmd, pmd_off)) & ~(PG_SIZE - 1));
 
 		/* alloc page */
-		pte_off = get_pte_off(i);		
+		pte_off = get_pte_off(i);
 		if (get_pte_entry(pte, pte_off) == 0) {
 			if ((pg_frame = get_zero_page()) == NULL)
 				panic("[map_vma]ERROR: alloc page frame error!");
@@ -439,7 +441,8 @@ void map_vma(struct vm_area_struct *vma, pgd_t *pgd) {
 
 	/**
 	 * load file to user memory
-	 * suppose here the pgd is the current pgd, after setup page tables we can access those user memory afterwards.
+	 * suppose here the pgd is the current pgd, after setup page tables we can access those user
+	 *  memory afterwards.
 	 */
 
 	/* if this vma is for stack or heap, that means it doesn't have back file, we are done! */
@@ -470,3 +473,101 @@ void map_vma(struct vm_area_struct *vma, pgd_t *pgd) {
 	}
 }
 
+vma_struct *search_vma (uint64_t addr, mm_struct *mm) {
+	vma_struct *vma;
+
+	vma = mm->mmap;
+	while (vma != NULL) {
+		if (vma->vm_start <= addr && vma->vm_end > addr)
+			break;
+		else
+			vma = vma->next;
+	}
+
+	return vma;
+}
+
+void map_a_page (vma_struct *vma, uint64_t addr) {
+	pgd_t *pgd;
+	uint64_t pfn, vm_inner_off, prot;
+
+	int i;
+	int pgd_off, pud_off, pmd_off, pte_off;
+	void *pud, *pmd, *pte, *pg_frame;
+	char *usrp, *fp;
+
+	pgd = current->mm->pgd;
+	prot = vma->prot;
+	pfn = addr >> PG_BITS;
+
+	/* alloc pud */
+	pgd_off = get_pgd_off(pfn);
+	if (get_pgd_entry(pgd, pgd_off) == 0) {
+		if ((pud = get_zero_page()) == NULL)
+			panic("[map_vma]ERROR: alloc pud error!");
+
+		put_pgd_entry(pgd, pgd_off, pud, PGD_P | PGD_RW | PGD_US);
+	} else
+		pud = (void *)((uint64_t)PA2VA(get_pgd_entry(pgd, pgd_off)) & ~(PG_SIZE - 1));
+
+	/* alloc pmd */
+	pud_off = get_pud_off(pfn);
+	if (get_pud_entry(pud, pud_off) == 0) {
+		if ((pmd = get_zero_page()) == NULL)
+			panic("[map_vma]ERROR: alloc pmd error!");
+		put_pud_entry(pud, pud_off, pmd, PUD_P | PUD_RW | PUD_US);
+	} else
+		pmd = (void *)((uint64_t)PA2VA(get_pud_entry(pud, pud_off)) & ~(PG_SIZE - 1));
+
+	/* alloc pte */
+	pmd_off = get_pmd_off(pfn);
+	if (get_pmd_entry(pmd, pmd_off) == 0) {
+		if ((pte = get_zero_page()) == NULL)
+			panic("[map_vma]ERROR: alloc pte error!");
+		put_pmd_entry(pmd, pmd_off, pte, PMD_P | PMD_RW | PMD_US);
+	} else
+		pte = (void *)((uint64_t)PA2VA(get_pmd_entry(pmd, pmd_off)) & ~(PG_SIZE - 1));
+
+	/* alloc page */
+	pte_off = get_pte_off(pfn);
+	if (get_pte_entry(pte, pte_off) == 0) {
+		if ((pg_frame = get_zero_page()) == NULL)
+			panic("[map_vma]ERROR: alloc page frame error!");
+		/* in case this segment is readonly, so set it rw first and change PROT after load data */
+		put_pte_entry(pte, pte_off, pg_frame, PTE_P | PTE_RW | PTE_US);
+	}
+
+	/**
+	 * load file to user memory
+	 * suppose here the pgd is the current pgd, after setup page tables we can access those user
+	 * memory afterwards.
+	 */
+
+	/* if this vma is for stack or heap, that means it doesn't have back file, we are done! */
+	if (vma->vm_file == NULL)
+		return;
+
+	/* locate file pointer to vm_pgoff + vm_off of vm_file */
+	vm_inner_off = (pfn << PG_BITS) - vma->vm_start;
+	fp = (char *) (vma->vm_file->start_addr + vma->vm_pgoff + vm_inner_off);
+
+	/* locate user memory pointer to vm_start */
+	usrp = (char *) (pfn << PG_BITS);
+
+	/* copy data from file to user memory */
+	for (i = 0; i < PG_SIZE; i++)
+		*(usrp + i) = *(fp + i);
+
+	/* change page entry PROT permentally */
+	pgd_off = get_pgd_off(pfn);
+	pud = (void *)((uint64_t)PA2VA(get_pgd_entry(pgd, pgd_off)) & ~(PG_SIZE - 1));
+	pud_off = get_pud_off(pfn);
+	pmd = (void *)((uint64_t)PA2VA(get_pud_entry(pud, pud_off)) & ~(PG_SIZE - 1));
+	pmd_off = get_pmd_off(pfn);
+	pte = (void *)((uint64_t)PA2VA(get_pmd_entry(pmd, pmd_off)) & ~(PG_SIZE - 1));
+	pte_off = get_pte_off(pfn);
+	pg_frame = (void *)((uint64_t)PA2VA(get_pte_entry(pte, pte_off)) & ~(PG_SIZE - 1));
+	put_pte_entry(pte, pte_off, pg_frame, PTE_P | prot | PTE_US);
+
+	return;
+}

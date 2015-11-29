@@ -83,6 +83,8 @@ uint64_t get_free_page();
 void *get_zero_page();
 void free_page(uint64_t pfn);
 void map_vma(struct vm_area_struct *, pgd_t *);
+struct vm_area_struct *search_vma(uint64_t, mm_struct *);
+void map_a_page(struct vm_area_struct *, uint64_t);
 pgd_t *alloc_pgd();
 void copy_page(void *dest_page, void *src_page);
 
