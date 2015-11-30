@@ -31,7 +31,7 @@ void _start(void) {
 		printf("%s\n", *pe++);
 
 */
-//	brk((void*)0);
+	brk((void*)0);
 	res = main(argc, argv, envp);
 
 
