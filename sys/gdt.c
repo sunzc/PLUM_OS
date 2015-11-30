@@ -42,8 +42,8 @@ uint64_t gdt[MAX_GDT] = {
 	GDT_CS | P | DPL3 | L | LO_LIMIT | HI_LIMIT | GR,	/*** user code segment descriptor ***/
 	GDT_DS | P | W | DPL3 | LO_LIMIT | HI_LIMIT | GR,	/*** user data segment descriptor ***/
 	0, 0,                 			    		/*** TSS ***/
-	GDT_CS | P | DPL3 | L | LO_LIMIT | HI_LIMIT | GR,	/*** sysret user code segment descriptor ***/
 	GDT_DS | P | W | DPL3 | LO_LIMIT | HI_LIMIT | GR,	/*** sysret user data segment descriptor ***/
+	GDT_CS | P | DPL3 | L | LO_LIMIT | HI_LIMIT | GR,	/*** sysret user code segment descriptor ***/
 };
 
 struct gdtr_t {
