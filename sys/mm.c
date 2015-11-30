@@ -487,6 +487,19 @@ vma_struct *search_vma (uint64_t addr, mm_struct *mm) {
 	return vma;
 }
 
+void insert_vma (vma_struct *vma, mm_struct *mm) {
+	vma_struct *vmap;
+
+	if (mm->mmap == NULL)
+		mm->mmap = vma;
+	else {
+		vmap = mm->mmap;
+		while(vmap->next != NULL)
+			vmap  = vmap->next;
+		vmap->next = vma;
+	}
+}
+
 void map_a_page (vma_struct *vma, uint64_t addr) {
 	pgd_t *pgd;
 	uint64_t pfn, vm_inner_off, prot;

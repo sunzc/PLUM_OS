@@ -1,7 +1,10 @@
 #include <sys/sbunix.h>
 #include <sys/syscall.h>
+#include <sys/proc.h>
 
-//#define DEBUG_SYSCALL
+#define DEBUG_SYSCALL
+
+extern task_struct *current;
 
 const uint32_t CPUID_FLAG_MSR = 1 << 5;
 
@@ -21,6 +24,7 @@ uint64_t syscall_handler(int syscall_num, sc_frame *sf);
 uint64_t sys_null(int num);
 uint64_t read(sc_frame *);
 uint64_t write(sc_frame *);
+uint64_t brk(sc_frame *);
 
 void cpuid(int code, uint32_t *a, uint32_t *d) {
 	__asm volatile("cpuid":"=a"(*a), "=d"(*d):"a"(code):"ecx","ebx");
@@ -111,6 +115,9 @@ uint64_t syscall_handler(int syscall_num, sc_frame *sf) {
 		case SYS_write: 
 			res = write(sf);
 			break;
+		case SYS_brk:
+			res = brk(sf);
+			break;
 		default:
 			res = sys_null(syscall_num);
 			break;
@@ -121,14 +128,14 @@ uint64_t syscall_handler(int syscall_num, sc_frame *sf) {
 
 
 uint64_t read(sc_frame *sf) {
-	int res = 0;
+	uint64_t res = 0;
 	printf("syscall read!\n");
 
 	return res;
 }
 
 uint64_t write(sc_frame *sf) {
-	int res = 0;
+	uint64_t res = 0;
 	char *buf = (char *)(sf->rsi);
 
 #ifdef DEBUG_SYSCALL	
@@ -145,4 +152,49 @@ uint64_t sys_null(int num) {
 	printf("syscall num = %d, not supportted yet!\n", num);
 
 	return res;
+}
+/**
+ * change user process program break to addr.
+ */
+#define HEAP_LIMIT	0x7ffffff00000
+uint64_t brk(sc_frame *sf) {
+	uint64_t new_break, cur_break;
+	vma_struct *vma;
+
+	new_break = sf->rdi;
+	cur_break = current->mm->user_heap;
+
+#ifdef DEBUG_SYSCALL
+	printf("[brk] new_break : 0x%lx, cur_break: 0x%lx\n", new_break, cur_break);
+#endif
+
+	if (new_break == 0)
+		return cur_break;
+	else if (new_break > cur_break && new_break < HEAP_LIMIT) {	/* add or extend vma */
+		vma = search_vma(cur_break - 1, current->mm);
+		if (vma == NULL || (vma->prot & PTE_RW) == 0) {	/* no vma alloced yet, alloc one */
+			if ((vma = get_zero_page()) == NULL)
+				panic("[brk]ERROR: alloc vma failed!");
+
+			vma->vm_start = cur_break;
+			vma->vm_end = new_break;
+			vma->vm_file = NULL;
+			vma->prot = PTE_RW;
+			vma->vm_align = PG_SIZE;
+
+			insert_vma(vma, current->mm);
+
+		} else if (vma->prot & PTE_RW) {	/* ok, it's the writable data vma we want to extend */
+			if (vma->vm_end < new_break)
+				vma->vm_end = new_break;
+		}
+
+		return new_break;
+
+	} else if (new_break > HEAP_LIMIT)
+		panic("ERROR: reach heap limit!");
+	else
+		panic("ERROR: do not support shrink heap memory!");
+
+	return -1;
 }

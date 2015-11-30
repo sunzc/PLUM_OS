@@ -130,7 +130,7 @@ void exec(char *filename) {
 	
 
 	/* vma struct */
-	struct vm_area_struct *vma, *vmap;
+	struct vm_area_struct *vma;
 
 	/* Elf related part, mostly the program header */
 	void *elf_header, *ph;
@@ -236,15 +236,7 @@ void exec(char *filename) {
 			vma->vm_file = (file *)&(current->file_array) + fd;
 		}
 
-		if (current->mm->mmap == NULL)
-			current->mm->mmap = vma;
-		else {
-			/* insert current vma at the tail, assume segment are put in increasing order */
-			vmap = current->mm->mmap;
-			while(vmap->next != NULL)
-				vmap  = vmap->next;
-			vmap->next = vma;
-		}
+		insert_vma(vma, current->mm);
 
 		ph += phentsize;
 	}
@@ -265,29 +257,22 @@ void exec(char *filename) {
 	 */
 
 	/* insert vma for heap */
-	vma = (struct vm_area_struct *)get_zero_page();
+/*	vma = (struct vm_area_struct *)get_zero_page();
 	if (vma == NULL)
 		panic("[exec] ERROR: vma alloc failed!");
 	else {
 		vma->next = NULL;
 		vma->vm_start = current->mm->user_heap;
-		vma->vm_end = vma->vm_start + PG_SIZE; /* initial 4K */
+		vma->vm_end = vma->vm_start + PG_SIZE;
 		vma->prot = PTE_RW;
 		vma->vm_pgoff = 0;
 		vma->vm_filesz = 0;
 		vma->vm_align = PG_SIZE;
 		vma->vm_file = NULL;
 	}
-
+*/
 	/* insert current vma at the tail, assume segment are put in increasing order */
-	if (current->mm->mmap == NULL)
-		current->mm->mmap = vma;
-	else {
-		vmap = current->mm->mmap;
-		while(vmap->next != NULL)
-			vmap  = vmap->next;
-		vmap->next = vma;
-	}
+//	insert_vma(vma, current->mm);
 
 	/* insert vma for stack */
 	vma = (struct vm_area_struct *)get_zero_page();
@@ -305,14 +290,7 @@ void exec(char *filename) {
 	}
 
 	/* insert current vma at the tail, assume segment are put in increasing order */
-	if (current->mm->mmap == NULL)
-		current->mm->mmap = vma;
-	else {
-		vmap = current->mm->mmap;
-		while(vmap->next != NULL)
-			vmap  = vmap->next;
-		vmap->next = vma;
-	}
+	insert_vma(vma, current->mm);
 
 	/**
 	 *  fake the user stack, make it look like this:

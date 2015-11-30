@@ -71,7 +71,7 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 
 void run_init_process() {
 	printf("process name: %s\n", current->name);
-	exec("bin/hello");
+	exec("bin/sbush");
 }
 
 void thread_A() {
