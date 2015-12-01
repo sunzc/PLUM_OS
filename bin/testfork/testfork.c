@@ -11,6 +11,7 @@ int main(int argc, char* argv[], char* envp[]) {
 	if (pid == 0) {//child
 		g++;
 		printf("I'm in child!, global g:%d\n", g);
+		execve("bin/hello", argv, envp);
 	} else {
 		g++;
 		printf("I'm in father, child pid = %d, g++ = %d\n", pid, g);
