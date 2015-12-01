@@ -56,7 +56,8 @@ task_struct * __switch_to(task_struct *me, task_struct *next, task_struct **last
 void schedule(void);
 void init_proc(void);
 int kernel_thread(void (*f)(void), char *thread_name);
-void exec(char *);
+void exec(char *filename, char *argv[], char *envp[]);
 void switch_mm(task_struct *prev, task_struct *next);
+void unmap_mm(task_struct *tsp);
 
 #endif

@@ -18,6 +18,10 @@ static task_struct * select_task_struct(void);
 static task_struct * switch_to(task_struct *, task_struct *, task_struct **);
 static uint64_t map_pflags_to_vmprot(uint32_t p_flags);
 
+int get_strlist_size(char *argv[]);
+int get_strlist_num(char *argv[]);
+void copy_strlist(char *des_argv[], char *src_argv[], char *start);
+
 void init_proc() {
 	task_headp =(task_struct *) get_zero_page();
 
@@ -81,6 +85,9 @@ void schedule() {
 
 	current = next;
 
+	/* switch tss.rsp0 */
+	tss.rsp0 = (uint64_t)(next->kernel_stack);
+
 	//__switch_to(me, next, &me->last);
 	switch_mm(me, next);
 	switch_to(me, next, &me->last);
@@ -120,15 +127,17 @@ static task_struct * select_task_struct(void) {
  *	3. ret_to_user to start execute.
  */
 
-void exec(char *filename) {
+void exec(char *filename, char *argv[], char *envp[]) {
 	int i, fd;
 	void *fp;
 
 	/* future kernel stack */
-	void *future_kstack, *sp;
-	int argc;
-	char *argv, *envp;
-	
+	void *future_kstack;
+
+	/* future user stack */
+	void *argvp, *envpp, *argcp;
+	int arglist_size, envlist_size, argv_num, envp_num, parameter_size;
+	uint64_t pa_start, pv_start;
 
 	/* vma struct */
 	struct vm_area_struct *vma;
@@ -152,6 +161,9 @@ void exec(char *filename) {
 	/* we don't want to change file->pos, give size 0, we will get the file pointer at start pos 0 */
 	fp = tarfs_read(fd, 0);
 
+	/* free previous mm_struct */
+	unmap_mm(current);
+
 	/* prepare for loading */
 	assert(current->mm == NULL);
 
@@ -169,7 +181,7 @@ void exec(char *filename) {
 	current->mm->data_start = 0;
 	current->mm->data_end = 0;
 	/* toppest user address */
-	current->user_stack = 0x7ffffffffffc;
+	current->user_stack = 0x800000000000;
 	/* will be adjusted later, should be the lowest userable address above .text .data segments */
 	current->mm->user_heap = 0;
 
@@ -281,7 +293,7 @@ void exec(char *filename) {
 		panic("[exec] ERROR: vma alloc failed!");
 	else {
 		vma->next = NULL;
-		vma->vm_end = (current->user_stack & ~(PG_SIZE - 1)) + PG_SIZE;
+		vma->vm_end = current->user_stack;
 		vma->vm_start = vma->vm_end - (0x10 * PG_SIZE); /* stack limit 0x10 * 4K */
 		vma->prot = PTE_RW;
 		vma->vm_pgoff = 0;
@@ -308,6 +320,43 @@ void exec(char *filename) {
 	 *     --------
 	 */
 
+	/* map a page for stack, we are going to prepare stack data for new process */
+	map_a_page(vma, (uint64_t)(current->user_stack - PG_SIZE));
+
+	arglist_size = get_strlist_size(argv); /* count ending '\0' into size */
+	envlist_size = get_strlist_size(envp);
+	argv_num = get_strlist_num(argv) + 1; /* reserve space for NULL */
+	envp_num = get_strlist_num(envp) + 1;
+
+	parameter_size = arglist_size + envlist_size + (argv_num * 8) + (envp_num * 8) + 8;
+	assert(parameter_size  + 0x100 < PG_SIZE);
+
+	/* get envp and argv string list's start address */
+	pa_start = (current->user_stack - arglist_size - 8) & (~0x7); /* bottom limit, 8 byte align */
+	pv_start = (pa_start - envlist_size - 8) & (~0x7);
+
+	/* get envp and argv address */
+	envpp = (void *)(pv_start - envp_num * 8);
+	argvp = (void *)((uint64_t)envpp - argv_num * 8);
+
+	/* copy string and string pointer array at the same time */
+	copy_strlist((char **)envpp, envp, (char *)pv_start);
+	copy_strlist((char **)argvp, argv, (char *)pa_start);
+
+	/* copy argc */
+	argcp = argvp - 8;
+	*((int *)argcp) = argv_num - 1;
+
+	/* adjust user_stack */
+	current->user_stack = (uint64_t)argcp;
+
+	/* DEBUG:TODO */
+	//printf("[execve]dump user stack:\n");
+	//dump_stack((void *)(current->user_stack), parameter_size/8);
+
+/**
+ * old way to handle stack, not a real case.
+ *
 	sp = (void *)(current->user_stack);
 	sp = (void *)((uint64_t)sp & ~0xf);
 	map_a_page(vma, (uint64_t)sp);
@@ -326,6 +375,7 @@ void exec(char *filename) {
 	*(uint64_t *)(sp + 16) = (uint64_t)0;
 	*(uint64_t *)(sp + 24) = (uint64_t)envp;
 	current->user_stack = (uint64_t)sp;
+*/
 
 	/**
 	 * Before we return to user, we should set tss.rsp0 to a given kernel stack,
@@ -368,3 +418,37 @@ static uint64_t map_pflags_to_vmprot(uint32_t p_flags) {
 
 	return prot;
 }
+
+int get_strlist_size(char *argv[]) {
+	int i, size;
+
+	size = 0;
+	for (i = 0; *(argv + i) != NULL; i++) {
+	//	printf("[get_strlist_size]argv+i:%s\n",*(argv + i));
+		size += strlen(*(argv + i)) + 1;
+	}
+
+	return size;
+}
+
+int get_strlist_num(char *argv[]) {
+	int i = 0;
+	while(*(argv + i) != NULL)
+		i++;
+
+	return i;
+}
+
+void copy_strlist(char *des_argv[], char *src_argv[], char *start) {
+	int i = 0, len;
+
+	while(*(src_argv + i) != NULL) {
+	//	printf("[copy_strlist]src argv+i:%s\n", *(src_argv + i));
+		des_argv[i] = start;
+		len = strlen(*(src_argv + i));
+		strncpy(start, *(src_argv + i), len);
+		start += len + 1;
+		i++;
+	}
+}
+

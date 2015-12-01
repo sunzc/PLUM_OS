@@ -12,6 +12,10 @@ extern int pid_count;
 const uint32_t CPUID_FLAG_MSR = 1 << 5;
 
 typedef struct sc_frame {
+	uint64_t rbp;
+	uint64_t r15;
+	uint64_t r14;
+	uint64_t r13;
 	uint64_t r11;
 	uint64_t r10;
 	uint64_t r9;
@@ -20,6 +24,7 @@ typedef struct sc_frame {
 	uint64_t rsi;
 	uint64_t rdx;
 	uint64_t rcx;
+	uint64_t rbx;
 }sc_frame;
 
 extern void __syscall_handler(void);
@@ -31,10 +36,10 @@ uint64_t read(sc_frame *);
 uint64_t write(sc_frame *);
 uint64_t brk(sc_frame *);
 uint64_t fork (sc_frame *sf);
+uint64_t execve(sc_frame *sf);
 
 void copy_mm(mm_struct *new, mm_struct *old);
 void copy_vma_deep(vma_struct *new_vmap, pgd_t *new_pgd, vma_struct *old_vmap, pgd_t *old_pgd);
-void dump_stack(void *stack, int size);
 
 void cpuid(int code, uint32_t *a, uint32_t *d) {
 	__asm volatile("cpuid":"=a"(*a), "=d"(*d):"a"(code):"ecx","ebx");
@@ -131,6 +136,9 @@ uint64_t syscall_handler(int syscall_num, sc_frame *sf) {
 		case SYS_fork:
 			res = fork(sf);
 			break;
+		case SYS_execve:
+			res = execve(sf);
+			break;
 		default:
 			res = sys_null(syscall_num);
 			break;
@@ -197,7 +205,11 @@ uint64_t brk(sc_frame *sf) {
 		return cur_break;
 	else if (new_break > cur_break && new_break < HEAP_LIMIT) {	/* add or extend vma */
 		vma = search_vma(cur_break - 1, current->mm);
-		if (vma == NULL || (vma->prot & PTE_RW) == 0) {	/* no vma alloced yet, alloc one */
+		if (vma == NULL || (vma->prot & PTE_RW) == 0 || vma->vm_file != NULL) {
+			/**
+			 * no vma alloced yet, alloc one.
+			 * it's tricky here, when vma->vm_file!=NULL, it's data seg
+			 */
 			if ((vma = get_zero_page()) == NULL)
 				panic("[brk]ERROR: alloc vma failed!");
 
@@ -225,6 +237,10 @@ uint64_t brk(sc_frame *sf) {
 }
 
 void copy_sc_frame(sc_frame *new, sc_frame *old) {
+	new->rbp = old->rbp;
+	new->r15 = old->r15;
+	new->r14 = old->r14;
+	new->r13 = old->r13;
 	new->r11 = old->r11;
 	new->r10 = old->r10;
 	new->r9  = old->r9;
@@ -233,6 +249,7 @@ void copy_sc_frame(sc_frame *new, sc_frame *old) {
 	new->rsi = old->rsi;
 	new->rdx = old->rdx;
 	new->rcx = old->rcx;
+	new->rbx = old->rbx;
 }
 
 void copy_file_array(task_struct *new, task_struct *old) {
@@ -335,15 +352,6 @@ uint64_t fork (sc_frame *sf) {
 	return tsp->pid;
 }
 
-void dump_stack(void *stack, int size) {
-	int i;
-	printf("dump stack rsp:0x%lx\n", stack);
-	for (i = 0; i < size; i++) {
-		printf("%lx  ",((uint64_t *)stack + i));
-		if(i%4 == 0)
-			printf("\n");
-	}
-}
 
 void copy_vma(vma_struct *new, vma_struct *old) {
 	new->vm_start = old->vm_start;
@@ -360,26 +368,20 @@ void copy_vma(vma_struct *new, vma_struct *old) {
  *	2. if vma is writable, mark mapped page COW and readonly.
  */
 void copy_mm(mm_struct *new, mm_struct *old) {
-	vma_struct *new_vmap, *old_vmap, *p;
+	vma_struct *new_vmap, *old_vmap;
 
-	if ((new->mmap = (vma_struct *)get_zero_page()) == NULL)
-		panic("[copy_vma]ERROR: alloc new->mmap failed!");
-
-	new_vmap = new->mmap;
 	old_vmap = old->mmap;
 	while(old_vmap != NULL) {
+		if ((new_vmap = (vma_struct *)get_zero_page()) == NULL)
+			panic("[copy_vma]ERROR: alloc new->mmap failed!");
+
 		copy_vma(new_vmap, old_vmap);
 		copy_vma_deep(new_vmap, new->pgd, old_vmap, old->pgd);
 
-		if ((p = (vma_struct *)get_zero_page()) == NULL)
-			panic("[copy_vma]ERROR: alloc new->mmap failed!");
-		new_vmap->next = p;
+		insert_vma(new_vmap, new);
 
-		new_vmap = new_vmap->next;
 		old_vmap = old_vmap->next;
 	}
-
-	new_vmap->next = NULL;
 }
 
 void copy_vma_deep(vma_struct *new_vmap, pgd_t *new_pgd, vma_struct *old_vmap, pgd_t *old_pgd) {
@@ -464,4 +466,24 @@ void copy_vma_deep(vma_struct *new_vmap, pgd_t *new_pgd, vma_struct *old_vmap, p
 			add_page_ref(((uint64_t)VA2PA(pg_frame))>>PG_BITS);
 		}
 	}
+}
+
+/**
+ * the SYS_execve has three parameters:
+ * 	char *filename,
+ *	char *argv[]
+ * 	char *envp[]
+ *
+ * Note:
+ * 	execve never return, if return, something go wrong!
+ */
+uint64_t execve(sc_frame *sf) {
+	char *filename = (char *)(sf->rdi);
+	char **argv = (char **)(sf->rsi);
+	char **envp = (char **)(sf->rdx);
+
+	exec(filename, argv, envp);
+
+	return 0;
+
 }

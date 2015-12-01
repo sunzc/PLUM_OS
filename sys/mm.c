@@ -3,6 +3,9 @@
 
 extern task_struct *current;
 
+/* used as tag when free vma */
+enum{PG_FRAME=1, PTE, PMD, PUD, PGD};
+
 /* available physical memory block */
 phymem_block pmb_array[MAX_PHY_BLOCK];
 uint32_t pmb_count = 0;
@@ -523,6 +526,7 @@ vma_struct *search_vma (uint64_t addr, mm_struct *mm) {
 void insert_vma (vma_struct *vma, mm_struct *mm) {
 	vma_struct *vmap;
 
+	//printf("[insert_vma]start:0x%lx, end:0x%lx\n",vma->vm_start,vma->vm_end);
 	if (mm->mmap == NULL)
 		mm->mmap = vma;
 	else {
@@ -530,6 +534,7 @@ void insert_vma (vma_struct *vma, mm_struct *mm) {
 		while(vmap->next != NULL)
 			vmap  = vmap->next;
 		vmap->next = vma;
+		vma->next = NULL;
 	}
 }
 
@@ -616,4 +621,119 @@ void map_a_page (vma_struct *vma, uint64_t addr) {
 	put_pte_entry(pte, pte_off, pg_frame, PTE_P | prot | PTE_US);
 
 	return;
+}
+
+/**
+ * free only pg_frame pointed by pte entry , it's buggy,
+ * it's possible that a page be freed twice. POSSIBLE?TODO
+ */
+void free_vma(vma_struct *vmap, int tag) {
+	uint64_t i;
+	uint64_t pfn_start, pfn_end;
+	uint64_t *pg_frame;
+
+	//printf("[free_vma] vm_start:0x%lx, vm_end:0x%lx, tag:%d\n",vmap->vm_start, vmap->vm_end, tag);
+	switch(tag) {
+		case PG_FRAME:
+			pfn_start = (vmap->vm_start)>>12;
+			pfn_end = (vmap->vm_end - 1)>>12;
+			break;
+		case PTE:
+			pfn_start = (vmap->vm_start)>>(12 + 9);
+			pfn_end = (vmap->vm_end - 1)>>(12 + 9);
+			break;
+		case PMD:
+			pfn_start = (vmap->vm_start)>>(12 + 9 + 9);
+			pfn_end = (vmap->vm_end - 1)>>(12 + 9 + 9);
+			break;
+		case PUD:
+			pfn_start = (vmap->vm_start)>>(12 + 9 + 9 + 9);
+			pfn_end = (vmap->vm_end - 1)>>(12 + 9 + 9 + 9);
+			break;
+		default:
+			printf("[free_vma]ERROR: can't free this page directory, level: %d\n",tag);
+			return;
+	}
+
+
+	for (i = pfn_start; i <= pfn_end; i++) {
+		/* pg_frame is physical address */
+		switch(tag) {
+			case PG_FRAME:
+				pg_frame = (uint64_t *)get_pte_entry_addr_trick(i<<12);
+				i++;
+				break;
+			case PTE:
+				pg_frame = (uint64_t *)get_pmd_entry_addr_trick(i<<(12 + 9));
+				break;
+			case PMD:
+				pg_frame = (uint64_t *)get_pud_entry_addr_trick(i<<(12 + 9 + 9));
+				break;
+			case PUD:
+				pg_frame = (uint64_t *)get_pgd_entry_addr_trick(i<<(12 + 9 + 9 + 9));
+				break;
+			default:
+				printf("[free_vma]ERROR: can't free this page directory, level: %d\n",tag);
+				return;
+		}
+
+		if (*pg_frame != 0) {
+			free_page((*pg_frame)>>PG_BITS);
+			*pg_frame = 0;
+		}
+	}
+}
+
+void unmap_mm(task_struct *tsp) {
+	vma_struct *vmap, *p;
+	uint64_t pfn;
+	int i;
+
+	if (tsp->mm == NULL)
+		return;
+
+	/* free vma list in mm_struct */
+
+	/* First ,free pg_frame entries */
+	/* then free pte, pmd, pud */
+	for (i = PG_FRAME; i < PGD; i++) {
+		vmap = tsp->mm->mmap;
+		while(vmap != NULL) {
+			free_vma(vmap, i);
+			vmap = vmap->next;
+		}
+	}
+
+	/* it's time to free vma struct */
+	vmap = tsp->mm->mmap;
+	while(vmap != NULL) {
+		/* use p to keep the next pointer, in case free will clear the data */
+		p = vmap->next;
+		pfn = ((uint64_t)VA2PA(vmap)) >> PG_BITS;
+		//printf("[unmap_mm]vmap:0x%lx, pfn:0x%lx\n", vmap, pfn);
+		free_page(pfn);
+		vmap = p;
+	}
+
+	/* free pgd */
+	pfn = ((uint64_t)VA2PA(tsp->mm->pgd)) >> PG_BITS;
+	free_page(pfn);
+
+	/* reclaim the page occupied by mm_Struct */
+	pfn = ((uint64_t)VA2PA(tsp->mm)) >> PG_BITS;
+	free_page(pfn);
+
+	/* free mm_struct */
+	tsp->mm = NULL;
+}
+
+void dump_stack(void *stack, int size) {
+	int i;
+	printf("dump stack rsp:0x%lx\n", stack);
+	for (i = 0; i < size; i++) {
+		printf("0x%lx  ",*((uint64_t *)stack + i));
+		if(i%4 == 0)
+			printf("\n");
+	}
+	printf("\n");
 }
