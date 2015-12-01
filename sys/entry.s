@@ -28,7 +28,14 @@ __ret_to_user:
 # syscall_handler(int syscall_num, struct stack_frame *)
 #
 .global __syscall_handler
+.extern current
 __syscall_handler:
+#TODO:we should switch stack here
+	pushq %r12
+	movq current,%r12
+	movq %rsp,0x20(%r12)	# store rsp into current->user_stack
+	movq 0x18(%r12),%rsp	# load rsp from current->kernel_stack
+
 	pushq %rcx
 	pushq %rdx
 	pushq %rsi
@@ -50,5 +57,25 @@ __syscall_handler:
 	popq %rsi
 	popq %rdx
 	popq %rcx
+
+	movq %rsp,0x18(%r12)	# store rsp into current->kernel_stack
+	movq 0x20(%r12),%rsp	# load rsp from current->user_stack
+	popq %r12
 	sysretq	
 
+.global ret_from_fork
+ret_from_fork:
+	movq $0x0,%rax
+	popq %r11
+	popq %r10
+	popq %r9
+	popq %r8
+	popq %rdi
+	popq %rsi
+	popq %rdx
+	popq %rcx
+
+	movq %rsp,0x18(%r12)	# store rsp into current->kernel_stack
+	movq 0x20(%r12),%rsp	# load rsp from current->user_stack
+	popq %r12
+	sysretq

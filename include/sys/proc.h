@@ -15,6 +15,7 @@ typedef struct __attribute__((__packed__))  task_struct{
 
 
 	void *kernel_stack;
+	uint64_t user_stack;
 
 	/* file array keep track of opened files */
 	file file_array[MAX_FILE_NUM];
@@ -24,6 +25,7 @@ typedef struct __attribute__((__packed__))  task_struct{
 
 	/* only increase */
 	int pid;
+	int ppid;
 	char name[THREAD_NAME_SIZE];
 
 	/* points to kernel thread function */

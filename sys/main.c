@@ -65,13 +65,16 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 	kernel_thread(run_init_process, "init_process");
 	schedule();
 
-	printf("[main]ERROR:should not be here!\n");
-	while(1);
+	while(1) {
+		printf("[main]nothing to do, call schedule!\n");
+		schedule();
+	}
 }
 
 void run_init_process() {
 	printf("process name: %s\n", current->name);
-	exec("bin/sbush");
+//	exec("bin/sbush");
+	exec("bin/testfork");
 }
 
 void thread_A() {

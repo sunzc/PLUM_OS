@@ -82,6 +82,7 @@ void schedule() {
 	current = next;
 
 	//__switch_to(me, next, &me->last);
+	switch_mm(me, next);
 	switch_to(me, next, &me->last);
  	//__asm volatile("sti"::);
 
@@ -168,7 +169,7 @@ void exec(char *filename) {
 	current->mm->data_start = 0;
 	current->mm->data_end = 0;
 	/* toppest user address */
-	current->mm->user_stack = 0x7ffffffffffc;
+	current->user_stack = 0x7ffffffffffc;
 	/* will be adjusted later, should be the lowest userable address above .text .data segments */
 	current->mm->user_heap = 0;
 
@@ -280,7 +281,7 @@ void exec(char *filename) {
 		panic("[exec] ERROR: vma alloc failed!");
 	else {
 		vma->next = NULL;
-		vma->vm_end = (current->mm->user_stack & ~(PG_SIZE - 1)) + PG_SIZE;
+		vma->vm_end = (current->user_stack & ~(PG_SIZE - 1)) + PG_SIZE;
 		vma->vm_start = vma->vm_end - (0x10 * PG_SIZE); /* stack limit 0x10 * 4K */
 		vma->prot = PTE_RW;
 		vma->vm_pgoff = 0;
@@ -307,7 +308,7 @@ void exec(char *filename) {
 	 *     --------
 	 */
 
-	sp = (void *)(current->mm->user_stack);
+	sp = (void *)(current->user_stack);
 	sp = (void *)((uint64_t)sp & ~0xf);
 	map_a_page(vma, (uint64_t)sp);
 	argv = sp - 0x10;
@@ -324,7 +325,7 @@ void exec(char *filename) {
 	*(uint64_t *)(sp + 8) = (uint64_t)argv;
 	*(uint64_t *)(sp + 16) = (uint64_t)0;
 	*(uint64_t *)(sp + 24) = (uint64_t)envp;
-	current->mm->user_stack = (uint64_t)sp;
+	current->user_stack = (uint64_t)sp;
 
 	/**
 	 * Before we return to user, we should set tss.rsp0 to a given kernel stack,
@@ -342,7 +343,7 @@ void exec(char *filename) {
 	current->kernel_stack = future_kstack;
 
 	/* everything is ready, now we return to user */
-	__ret_to_user((void *)(current->mm->user_stack), (void *)(current->mm->entry));
+	__ret_to_user((void *)(current->user_stack), (void *)(current->mm->entry));
 }
 
 static uint64_t map_pflags_to_vmprot(uint32_t p_flags) {

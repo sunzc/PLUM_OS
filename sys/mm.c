@@ -201,6 +201,9 @@ static void setup_initial_pgtables() {
 	/* for pgd, only the 1st entry and the last entry is filled, they point to the pud, which is pgd + 1 page */
 	//*pgd = (uint64_t)pud | PGD_P | PGD_RW | PGD_US;
 	*(pgd + 0x1ff) = (uint64_t)pud | PGD_P | PGD_RW;
+
+	/* self-refering trick here, for the 0x1ff has already been used by kernel, we use 0x1fe */
+	*(pgd + 0x1fe) = (uint64_t)pgd | PGD_P | PGD_RW;
 	
 	/* for pud, the 1st entry and the 0x1fc entry is filled */
 	//*pud = (uint64_t)pmd | PUD_P | PUD_RW | PUD_US; 
@@ -229,6 +232,24 @@ static void setup_page_array() {
 				(page_array + (i * 64 + j))->ref= 0;
 		}
 	}
+}
+
+/* here we assume pfn is the physical address page frame */
+void add_page_ref(uint64_t pfn) {
+	assert((uint64_t)(page_array + pfn) < (uint64_t)page_array_end);
+	(page_array + pfn)->ref += 1;
+}
+
+/* here we assume pfn is the physical address page frame */
+int get_page_ref(uint64_t pfn) {
+	assert((uint64_t)(page_array + pfn) < (uint64_t)page_array_end);
+	return (page_array + pfn)->ref;
+}
+
+/* here we assume pfn is the physical address page frame */
+void deduct_page_ref(uint64_t pfn) {
+	assert((uint64_t)(page_array + pfn) < (uint64_t)page_array_end);
+	(page_array + pfn)->ref -= 1;
 }
 
 uint64_t get_free_page() {
@@ -350,15 +371,24 @@ void mm_init() {
 
 void switch_mm(task_struct *prev, task_struct *next) {
 	/* switch to a user process's address space */
-	assert(next->mm != NULL);
+	if (next->mm == NULL)
+		return;
 
-	if(prev != next) {
+	if (prev != next) {
 		__asm__ __volatile__(
 		"movq %0, %%cr3\n\t"
 		:
 		: "b" (VA2PA(next->mm->pgd))
 		:);
 	}
+}
+
+void flush_tlb() {
+	__asm__ __volatile__(
+	"movq %0, %%cr3\n\t"
+	:
+	: "b" (VA2PA(current->mm->pgd))
+	:);
 }
 
 /* copy page byte by byte */
@@ -381,6 +411,9 @@ pgd_t *alloc_pgd() {
 		return NULL;
 
 	copy_page(p, pgd_start);
+
+	/*self referencing trick, 0x1fe*/
+	*((uint64_t *)p + 0x1fe) = ((uint64_t)VA2PA(p)) | PGD_P | PGD_RW;
 
 	return (pgd_t *)(p); 
 }

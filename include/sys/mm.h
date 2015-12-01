@@ -70,7 +70,7 @@ typedef struct __attribute__((__packed__)) mm_struct {
 	/* we need to know the follow for user stack, heap, brk management */
 	uint64_t code_start, code_end;
 	uint64_t data_start, data_end;
-	uint64_t user_stack, user_heap;
+	uint64_t user_heap;
 
 	/* statistic info */
 	int mm_count;
@@ -88,5 +88,9 @@ void insert_vma(vma_struct *, mm_struct *);
 void map_a_page(struct vm_area_struct *, uint64_t);
 pgd_t *alloc_pgd();
 void copy_page(void *dest_page, void *src_page);
+int get_page_ref(uint64_t);
+void add_page_ref(uint64_t);
+void deduct_page_ref(uint64_t);
+void flush_tlb(void);
 
 #endif
