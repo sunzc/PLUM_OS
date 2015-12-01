@@ -74,7 +74,20 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 void run_init_process() {
 	printf("process name: %s\n", current->name);
 //	exec("bin/sbush");
-	exec("bin/testfork");
+	char *arg0 = "bin/testfork";
+	char *arg1 = "--test";
+	char *env0 = "PATH=bin/:libc/";
+	char *env1 = "USER=zhisun";
+	char *argv[3], *envp[3];
+
+	argv[0] = arg0;
+	argv[1] = arg1;
+	argv[2] = NULL;
+	envp[0] = env0;
+	envp[1] = env1;
+	envp[2] = NULL;
+
+	exec("bin/testfork", argv, envp);
 }
 
 void thread_A() {

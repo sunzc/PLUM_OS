@@ -92,5 +92,5 @@ int get_page_ref(uint64_t);
 void add_page_ref(uint64_t);
 void deduct_page_ref(uint64_t);
 void flush_tlb(void);
-
+void dump_stack(void *stack, int size);
 #endif

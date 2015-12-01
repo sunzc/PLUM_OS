@@ -2,7 +2,7 @@
 #include <sys/proc.h>
 #include <sys/pgfault.h>
 
-#define DEBUG_PGFAULT
+//#define DEBUG_PGFAULT
 
 extern task_struct *current;
 
@@ -32,10 +32,12 @@ void page_fault_handler(uint64_t addr, uint64_t ecode, uint64_t eip) {
 			/* handle copy-on-write here */
 
 			/* assert addr has been mapped */
-			printf("pte_addr:0x%lx\n",get_pte_entry_addr_trick(addr));
 			assert(get_pte_entry_trick(addr) != 0);
 			pte = get_pte_entry_trick(addr);
+#ifdef DEBUG_PGFAULT
+			printf("pte_addr:0x%lx\n",get_pte_entry_addr_trick(addr));
 			printf("[pgfault handler]pte:0x%lx\n", pte);
+#endif
 			if (pte & PTE_COW) {
 				if (get_page_ref(pte>>PG_BITS) > 1) {	/* it's shared, ref > 1 */
 					/**
@@ -64,7 +66,8 @@ void page_fault_handler(uint64_t addr, uint64_t ecode, uint64_t eip) {
 			} else /* real vialation happen, can't handle it !*/
 				goto bad_area;
 		} else
-			printf("[page_fault_handler] user level pagefault, present, no vialation. It's strange, we should not reach here!\n");
+			printf("[page_fault_handler] user level pagefault, present, no vialation. It's strange,\
+				 we should not reach here!\n");
 	} else {
 		/**
 		 * page fault happened in kernel mode is usually a real fault, except for some special
