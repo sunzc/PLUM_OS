@@ -36,6 +36,7 @@ __syscall_handler:
 	movq %rsp,0x20(%r12)	# store rsp into current->user_stack
 	movq 0x18(%r12),%rsp	# load rsp from current->kernel_stack
 
+	pushq %rbx
 	pushq %rcx
 	pushq %rdx
 	pushq %rsi
@@ -44,28 +45,19 @@ __syscall_handler:
 	pushq %r9
 	pushq %r10
 	pushq %r11
+	pushq %r13
+	pushq %r14
+	pushq %r15
+	pushq %rbp
 
 	movq %rax,%rdi
 	movq %rsp,%rsi
 	call syscall_handler 
 //	sti
-	popq %r11 
-	popq %r10 
-	popq %r9 
-	popq %r8 
-	popq %rdi
-	popq %rsi
-	popq %rdx
-	popq %rcx
-
-	movq %rsp,0x18(%r12)	# store rsp into current->kernel_stack
-	movq 0x20(%r12),%rsp	# load rsp from current->user_stack
-	popq %r12
-	sysretq	
-
-.global ret_from_fork
-ret_from_fork:
-	movq $0x0,%rax
+	popq %rbp
+	popq %r15
+	popq %r14
+	popq %r13
 	popq %r11
 	popq %r10
 	popq %r9
@@ -74,8 +66,31 @@ ret_from_fork:
 	popq %rsi
 	popq %rdx
 	popq %rcx
+	popq %rbx
 
 	movq %rsp,0x18(%r12)	# store rsp into current->kernel_stack
 	movq 0x20(%r12),%rsp	# load rsp from current->user_stack
 	popq %r12
+	sysretq	
+
+.global ret_from_fork
+ret_from_fork:
+	popq %rbp
+	popq %r15
+	popq %r14
+	popq %r13
+	popq %r11
+	popq %r10
+	popq %r9
+	popq %r8
+	popq %rdi
+	popq %rsi
+	popq %rdx
+	popq %rcx
+	popq %rbx
+
+	movq %rsp,0x18(%r12)	# store rsp into current->kernel_stack
+	movq 0x20(%r12),%rsp	# load rsp from current->user_stack
+	popq %r12
+	movq $0x0,%rax
 	sysretq
