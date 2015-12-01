@@ -1,0 +1,5 @@
+sys/*.swp
+include/sys/*.swp
+include/*.swp
+rootfs/*
+obj/*
