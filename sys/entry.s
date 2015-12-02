@@ -21,6 +21,7 @@ __ret_to_user:
 	pushfq
 	pushq $0x1B # user code segment with bottom bits set for ring3
 	pushq %rsi
+	sti
 	iretq
 
 ##############
@@ -31,6 +32,7 @@ __ret_to_user:
 .extern current
 __syscall_handler:
 #TODO:we should switch stack here
+	cli
 	pushq %r12
 	movq current,%r12
 	movq %rsp,0x20(%r12)	# store rsp into current->user_stack
@@ -53,7 +55,7 @@ __syscall_handler:
 	movq %rax,%rdi
 	movq %rsp,%rsi
 	call syscall_handler 
-//	sti
+	sti
 	popq %rbp
 	popq %r15
 	popq %r14
@@ -75,6 +77,7 @@ __syscall_handler:
 
 .global ret_from_fork
 ret_from_fork:
+	sti
 	popq %rbp
 	popq %r15
 	popq %r14

@@ -3,6 +3,7 @@
 .align 4
 
 _isr_wrapper_timer:
+	pushq %rbp
 	pushq %rax
 	pushq %rbx
 	pushq %rcx
@@ -36,4 +37,5 @@ _isr_wrapper_timer:
 	popq %rcx
 	popq %rbx
 	popq %rax
+	popq %rbp
 	iretq

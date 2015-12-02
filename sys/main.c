@@ -56,7 +56,7 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 	init_tarfs();
 //	test_tarfs();
 	init_syscall();
-//	__asm volatile("sti"::);
+	__asm volatile("sti"::);
 /*	while(1) {
 		printf("I'm the init process\n");
 		schedule();

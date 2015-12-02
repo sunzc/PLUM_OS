@@ -3,6 +3,7 @@
 .align 4
 
 _isr_wrapper_kbd:
+	pushq %rbp
 	pushq %rax
 	pushq %rbx
 	pushq %rcx
@@ -17,12 +18,10 @@ _isr_wrapper_kbd:
 	pushq %r13
 	pushq %r14
 	pushq %r15
-	pushq %rbp
 
 	cld /*  C code following the sysV ABI requires DF to be clear on function entry */
 	call kbdintr
 	sti
-	popq %rbp
 	popq %r15 
 	popq %r14 
 	popq %r13 
@@ -37,4 +36,5 @@ _isr_wrapper_kbd:
 	popq %rcx
 	popq %rbx
 	popq %rax
+	popq %rbp
 	iretq

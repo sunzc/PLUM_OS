@@ -26,7 +26,7 @@ _page_fault_handler:
 	movq 0x78(%rsp),%rdx		#/* exception ip for debug */
 	call page_fault_handler
 
-//	sti
+	sti
 	popq %r15 
 	popq %r14 
 	popq %r13 
