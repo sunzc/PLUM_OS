@@ -15,7 +15,7 @@ void page_fault_handler(uint64_t addr, uint64_t ecode, uint64_t eip) {
 	printf("[page_fault_handler] addr: 0x%lx, ecode: 0x%lx, eip: 0x%lx\n", addr, ecode, eip);
 #endif
 
-	if (ecode & PFEC_US) {	/* page fault in user mode, worth attention */
+	if (ecode & PFEC_US ) {	/* page fault in user mode, worth attention */
 		if (!(ecode & PFEC_P)) {	/* PFEC_P:0, page not present */
 
 			vma = search_vma(addr, current->mm);

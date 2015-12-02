@@ -19,6 +19,7 @@ void *_loaderend;
 void thread_A(void);
 void thread_B(void);
 void run_init_process(void);
+void thread_idle(void);
 
 void start(uint32_t* modulep, void* physbase, void* physfree)
 {
@@ -56,17 +57,17 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 	init_tarfs();
 //	test_tarfs();
 	init_syscall();
-	__asm volatile("sti"::);
 /*	while(1) {
 		printf("I'm the init process\n");
 		schedule();
 	}
 */
+	__asm volatile("sti"::);
+	kernel_thread(thread_idle, "idle");
 	kernel_thread(run_init_process, "init_process");
-	schedule();
 
 	while(1) {
-		printf("[main]nothing to do, call schedule!\n");
+		//printf("[main]nothing to do, call schedule!\n");
 		schedule();
 	}
 }
@@ -87,7 +88,7 @@ void run_init_process() {
 	envp[1] = env1;
 	envp[2] = NULL;
 
-	exec("bin/testfork", argv, envp);
+	exec("bin/testread", argv, envp);
 }
 
 void thread_A() {
@@ -95,6 +96,10 @@ void thread_A() {
 		printf("I'm thread_A\n");
 		schedule();
 	}
+}
+void thread_idle() {
+	/* we do nothing here, just wait for interrupt */
+	while(1);
 }
 
 void thread_B() {
