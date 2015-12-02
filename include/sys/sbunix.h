@@ -8,6 +8,7 @@ extern void kbdinit(void);
 extern void kbdintr(void);
 void printf(const char *fmt, ...);
 void put_to_screen(char c, int col, int row, int color);
+void print_to_screen(char c);
 
 static inline void outb(uint16_t port, uint8_t data) {
 	__asm volatile("out %0, %1": : "a" (data), "d" (port));

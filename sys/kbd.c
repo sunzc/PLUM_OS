@@ -2,13 +2,26 @@
 #include <sys/irq.h>
 #include <sys/kbd.h>
 #include <sys/pic.h>
+#include <sys/proc.h>
 
 #define KBD_STAT_PORT		0x64	// kbd controller status port(I)
 #define KBD_DATA_INBF		0x01	// kdb data in buffer
 #define KBD_DATA_PORT		0x60	// kbd data port(I)
 
+/* we implement terminal here, for it's convenient */
+
+#define STDIN_BUF_SIZE		4096
+char *stdin_buf;
+int stdin_buf_size = 0;
+
+/* state 0: not ready, 1 ready */
+int stdin_buf_state = 0;
+
+/* if process wait for stdin, it will sleep here */
+extern task_struct *wait_stdin_list;
 
 void kbdinit(void) {
+	stdin_buf = (char *)get_zero_page();
 	picenable(IRQ_KBD);
 }
 
@@ -35,16 +48,30 @@ void kbdintr(void) {
 	else if (is_special_key_pressed(data))
 		special_key_pressed = data;
 	else if (is_normal_key_released(data) && special_key_pressed == 0) {
-		put_to_screen(' ', 64, 24, 0);
-		put_to_screen(normalmap[normal_key_pressed], 65, 24, 0);
+//		put_to_screen(' ', 64, 24, 0);
+//		put_to_screen(normalmap[normal_key_pressed], 65, 24, 0);
+		if(normal_key_pressed != 0xe) {	// backspace
+			print_to_screen(normalmap[normal_key_pressed]);
+			stdin_buf[stdin_buf_size++] = normalmap[normal_key_pressed];
+			if(normal_key_pressed == 0x39) {	// '\n' 0x9c 0x39 ' '
+				stdin_buf[stdin_buf_size++] = '\n';
+				stdin_buf_state = 1; //BUF_READY
+				wakeup(&wait_stdin_list, NULL, 0);
+			}
+		} else {
+			print_to_screen(0xe);
+			stdin_buf_size--;
+		}
 		normal_key_pressed = 0; // clear it
 	} else if (is_normal_key_released(data) && special_key_pressed != 0) {
 		switch(special_key_pressed) { 
 			// to make life easier, we handle special key when either normal key or special key
 			// released
 			case 0x2A: // Shift
-				put_to_screen(' ', 64, 24, 0);
-				put_to_screen(shiftmap[normal_key_pressed], 65, 24, 0);
+				print_to_screen(normalmap[normal_key_pressed]);
+				stdin_buf[stdin_buf_size++] = shiftmap[normal_key_pressed];
+//				put_to_screen(' ', 64, 24, 0);
+//				put_to_screen(shiftmap[normal_key_pressed], 65, 24, 0);
 				break;
 			case 0x38: // Alt
 				put_to_screen('@', 64, 24, 0);
@@ -64,8 +91,10 @@ void kbdintr(void) {
 				// to make life easier, we handle special key when either normal key or special key
 				// released
 				case 0x2A: // Shift
-					put_to_screen(' ', 64, 24, 0);
-					put_to_screen(shiftmap[normal_key_pressed], 65, 24, 0);
+					print_to_screen(normalmap[normal_key_pressed]);
+					stdin_buf[stdin_buf_size++] = shiftmap[normal_key_pressed];
+					//put_to_screen(' ', 64, 24, 0);
+					//put_to_screen(shiftmap[normal_key_pressed], 65, 24, 0);
 					break;
 				case 0x38: // Alt
 					put_to_screen('@', 64, 24, 0);

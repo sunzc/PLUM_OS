@@ -4,10 +4,17 @@
 #include <sys/string.h>
 
 //#define DEBUG_SYSCALL
+#define BUF_READY	1
+#define BUF_NOT_READY	0
 
 extern task_struct *current;
 extern task_struct *task_headp;
+extern task_struct *wait_stdin_list;
 extern int pid_count;
+
+extern int stdin_buf_state;
+extern int stdin_buf_size;
+extern char *stdin_buf;
 
 const uint32_t CPUID_FLAG_MSR = 1 << 5;
 
@@ -37,6 +44,8 @@ uint64_t write(sc_frame *);
 uint64_t brk(sc_frame *);
 uint64_t fork (sc_frame *sf);
 uint64_t execve(sc_frame *sf);
+void read_stdin(char *buf, int size);
+void copy_from_kernel(char *ubuf, char *kbuf, int size);
 
 void copy_mm(mm_struct *new, mm_struct *old);
 void copy_vma_deep(vma_struct *new_vmap, pgd_t *new_pgd, vma_struct *old_vmap, pgd_t *old_pgd);
@@ -147,14 +156,70 @@ uint64_t syscall_handler(int syscall_num, sc_frame *sf) {
 	return res;
 }
 
+/* page fault may happen, it's buggy TODO */
+void copy_from_kernel(char *ubuf, char *kbuf, int size) {
+	int i = 0;
+	vma_struct *vma;
 
+	vma = search_vma((uint64_t)ubuf, current->mm);
+	if (vma != NULL)
+		map_a_page(vma, (uint64_t)ubuf);
+
+	//printf("ubuf:0x%lx, kbuf:0x%lx\n",ubuf, (uint64_t)(&kbuf));
+
+	for (i = 0; i < size; i++)
+			*(ubuf + i) = *(kbuf + i);
+}
+
+void read_stdin(char *buf, int size) {
+	int i = 0;
+
+	//printf("read_stdin:buf:0x%lx, size : 0x%lx\n", (uint64_t)buf, size);
+	if (size >= stdin_buf_size) {
+		copy_from_kernel(buf, stdin_buf, stdin_buf_size);
+		stdin_buf_size = 0;
+
+		/* only when buffer is empty, set it not ready */
+		stdin_buf_state = BUF_NOT_READY;
+	} else {
+		copy_from_kernel(buf, stdin_buf, size);
+		for (i = size; i < stdin_buf_size; i++)
+			stdin_buf[i-size] = stdin_buf[i];
+
+		stdin_buf_size -= size;
+	}
+}
+
+/* fd 0: stdin, 1: stdout, 2: stderr */
 uint64_t read(sc_frame *sf) {
 	uint64_t res = 0;
-	printf("syscall read!\n");
+	int fd;
+	char *buf;
+	uint64_t size;
+	//printf("syscall read!\n");
+
+	fd = (int)(sf->rdi);
+	buf = (char *)(sf->rsi);
+	size = sf->rdx;
+
+	if (fd == 0) { /* read from stdin */
+		/* do we need lock here to guarantee ATOMICALITY TODO */
+		while(stdin_buf_state != BUF_READY) {
+			sleep(&wait_stdin_list, 0);
+		}
+
+		read_stdin(buf, size);
+
+		res = size;
+	} else {
+		/* TODO */
+		printf("[read] do not support non-stdin read, so far \n");
+	}
 
 	return res;
 }
 
+/* only support write to stdout TODO */
 uint64_t write(sc_frame *sf) {
 	uint64_t res = 0;
 	char *buf = (char *)(sf->rsi);

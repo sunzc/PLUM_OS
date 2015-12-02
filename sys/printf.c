@@ -12,12 +12,12 @@
 typedef unsigned long uint64_t;
 typedef uint64_t size_t;
 
+extern int stdin_buf_size;
 
 static char *int_to_string(char *buf, int n);
 static char *longlong_to_hexstring(char *buf, unsigned long long n);
 static char *longlong_to_string(char *buf, unsigned long long n);
 static void scoll_screen_up(void);
-static void print_to_screen(char c);
 void put_to_screen(char c, int col, int row, int color);
 int vsprintf(char *str, const char *fmt, va_list ap);
 
@@ -201,10 +201,10 @@ static char *longlong_to_hexstring(char *buf, unsigned long long n){
 	return &buf[pos];
 }
 
-static void print_to_screen(char c) {
+void print_to_screen(char c) {
 	int ncol, nrow;
 
-	if (c != '\t' && c != '\n' && c !='\b' && c != '\r') {
+	if (c != '\t' && c != '\n' && c !='\b' && c != '\r' && c != 0xe) {
 		screen_buffer[cursor.row * MAX_COLUMN * 2 + cursor.col * 2] = c;
 		screen_buffer[cursor.row * MAX_COLUMN * 2 + cursor.col * 2 + 1] = 0;
 
@@ -233,6 +233,12 @@ static void print_to_screen(char c) {
 
 		cursor.row = nrow;
 		cursor.col = ncol;
+	} else if (c == 0xe) {	/* '\b' */
+		if (stdin_buf_size > 0) {
+			screen_buffer[cursor.row * MAX_COLUMN * 2 + (cursor.col - 1) * 2] = ' ';
+			screen_buffer[cursor.row * MAX_COLUMN * 2 + (cursor.col - 1) * 2 + 1] = 0;
+			cursor.col -= 1;
+		}
 	}
 
 	return;
