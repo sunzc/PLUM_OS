@@ -586,6 +586,9 @@ void map_a_page (vma_struct *vma, uint64_t addr) {
 			panic("[map_vma]ERROR: alloc page frame error!");
 		/* in case this segment is readonly, so set it rw first and change PROT after load data */
 		put_pte_entry(pte, pte_off, pg_frame, PTE_P | PTE_RW | PTE_US);
+	} else {
+		/*page has already been mapped*/
+		return;
 	}
 
 	/**
