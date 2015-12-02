@@ -8,11 +8,12 @@
 #define MAX_FILE_NUM		20
 #define THREAD_NAME_SIZE	100
 
+typedef enum TASK_STATE{RUNNING=1, ACTIVE, SLEEP} TASK_STATE;
+
 typedef struct __attribute__((__packed__))  task_struct{
 	struct task_struct *prev;
 	struct task_struct *next;
 	struct task_struct *last;
-
 
 	void *kernel_stack;
 	uint64_t user_stack;
@@ -27,6 +28,21 @@ typedef struct __attribute__((__packed__))  task_struct{
 	int pid;
 	int ppid;
 	char name[THREAD_NAME_SIZE];
+
+	/**
+	 * process state
+	 * process have three states:
+	 * 	1. running. ### current points to it
+	 * 	2. active.  ### task_headp points to the list, they are ready to run.
+	 *	3. sleep.   ### sleep list, a process may wait for some resources.
+	 *
+	 * In detail, sleep list are separate lists, each resouce may have its own sleep list.
+	 * we currently support two kinds of sleep lists:
+	 * 	a) wait for a timer interrupt, that means it sleep for a certain time.
+	 *	b) wait for std input.
+	 */
+	TASK_STATE state;
+	int sleep_time;
 
 	/* points to kernel thread function */
 	void (*func)(void);
@@ -59,5 +75,9 @@ int kernel_thread(void (*f)(void), char *thread_name);
 void exec(char *filename, char *argv[], char *envp[]);
 void switch_mm(task_struct *prev, task_struct *next);
 void unmap_mm(task_struct *tsp);
+int remove_from_tasklist(task_struct **head, task_struct *ts);
+void add_to_tasklist(task_struct **head, task_struct *ts);
+void sleep(task_struct **list, uint64_t time);
+void wakeup(task_struct **list, task_struct *ts, int flag);
 
 #endif

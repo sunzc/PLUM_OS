@@ -8,8 +8,15 @@
 /* task struct are linked in a double-linked list, task_headp points to the head */
 task_struct *task_headp = NULL;
 task_struct *current = NULL;
+task_struct *sleep_task_list = NULL;
+task_struct *wait_stdin_list = NULL;
 extern void *pgd_start;
 extern void __ret_to_user(void *user_stack, void *user_entry);
+
+/* terminal or keyboard related */
+extern char *stdin_buf;
+extern int stdin_buf_size;
+extern int stdin_buf_state;
 
 /* current highest pid number */
 int pid_count = 0;
@@ -81,7 +88,10 @@ void schedule() {
 
 	me = current;
 	next = select_task_struct();
-	assert(next != me);
+
+	/* give up, maybe no process to schedule */
+	if(next == me)
+		return;
 
 	current = next;
 
@@ -452,3 +462,81 @@ void copy_strlist(char *des_argv[], char *src_argv[], char *start) {
 	}
 }
 
+/* always add to head, assume it's a single linked list */
+void add_to_tasklist(task_struct **head, task_struct *ts) {
+	ts->next = *head;
+	*head = ts;
+}
+
+/* return 0 on success, -1 on failed */
+int remove_from_tasklist(task_struct **head, task_struct *ts) {
+	task_struct *p = *head;
+	if (p == ts) {
+		/* if p points to ts, just remove it */
+		*head = ts->next;
+		return 0;
+	}
+
+	/* traverse list to find ts */
+	while(p->next != ts) {
+		p = p->next;
+	}
+
+	/* if we find it, remove it */
+	if (p->next == ts) {
+		p->next = ts->next;
+		return 0;
+	} else
+		return -1;
+}
+
+/* put myself on list, and set sleep time */
+void sleep(task_struct **list, uint64_t time) {
+	remove_from_tasklist(&task_headp, current);
+	add_to_tasklist(list, current);
+
+	current->sleep_time = time;
+	current->state = SLEEP;
+
+	/* yield to other process */
+	schedule();
+}
+
+/**
+ * usually, we should wake up all the process on the waiting list, sometimes
+ * for example, stdin buffer ready.
+ * but sometimes, we should wake up one process, like the process who sleep for
+ * a period of time.
+ * flag 0, wake up the whole list
+ * flag 1, wake up only one task.
+ * NOTE(TODO):
+ * 	always remove a task_struct before add it to a new list.
+ */
+void wakeup(task_struct **list, task_struct *ts, int flag) {
+	task_struct *p, *next;
+
+	assert(list != NULL);
+
+	if (flag == 0) {
+		p = *list;
+		next = p;
+		while(next != NULL) {
+			next = p->next;
+			p->state = ACTIVE;
+			p->sleep_time = 0;
+			remove_from_tasklist(list, p);
+			add_to_tasklist(&task_headp, p);
+			p = next;
+		}
+	} else if (flag == 1) {
+		assert(ts!=NULL);
+		ts->state = ACTIVE;
+		ts->sleep_time = 0;
+		remove_from_tasklist(list, ts);
+		add_to_tasklist(&task_headp, ts);
+	} else
+		panic("[wakeup]: unknown flag ");
+
+/* should we schedule immediately TODO, maybe not*/
+//	schedule();
+}
