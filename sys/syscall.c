@@ -318,7 +318,6 @@ uint64_t read(sc_frame *sf) {
 	char *buf;
 	void *p;
 	uint64_t size, readsz;
-	//printf("syscall read!\n");
 
 	fd = (int)(sf->rdi);
 	buf = (char *)(sf->rsi);
@@ -351,13 +350,21 @@ uint64_t read(sc_frame *sf) {
 		else
 			readsz = current->file_array[fd].size - current->file_array[fd].pos;
 
-		/* move read pointer */
-		current->file_array[fd].pos += readsz;
-
 		/* copy data from kernel to user buf */
 		p = current->file_array[fd].start_addr + current->file_array[fd].pos;
+/*		printf("[read] pos : 0x%lx\n",current->file_array[fd].pos);
+		printf("[read] start_addr : 0x%lx\n",current->file_array[fd].start_addr);
+		int i;
+		for(i = 0; i < readsz; i++)
+			printf("%c",*((char *)p+i));
+		printf("\n");
+		printf("[read] filename:%s, content:%s, readsz:%d\n",current->file_array[fd].name, (char *)p, readsz);
+*/
 		if (copy_from_kernel(buf, p, readsz) != 0)
 			return -1;
+
+		/* move read pointer */
+		current->file_array[fd].pos += readsz;
 	}
 
 	return readsz;
@@ -418,8 +425,9 @@ uint64_t chdir(sc_frame *sf) {
 
 	/* validate whether it's a legal path, no access control here */
 	if ((fd = tarfs_open(cwd,"r")) > 0) {
+		len = strlen(current->file_array[fd].name);
+		strncpy(current->cwd, current->file_array[fd].name, len);
 		tarfs_close(fd);
-		strncpy(current->cwd, cwd, strlen(cwd));
 		return 0;
 	} else
 		return -1;
@@ -576,11 +584,7 @@ uint64_t sys_null(int num) {
 	int res = 0;
 	printf("syscall num = %d, not supportted yet!\n", num);
 
-	panic("BUG!");
-	while(1) {
-		printf("I come into unsupported syscall, so yield. call schedule\n");
-		schedule();
-	}
+	exit_st(current, 1);
 	return res;
 }
 

@@ -60,7 +60,7 @@ int vsprintf(char *str, const char *fmt, va_list ap){
 	char c;
 	int n;
 	unsigned long long ull;
-	unsigned char uc;
+	char uc;
 	const char *s;
 	size_t idx = 0;
 	size_t j;

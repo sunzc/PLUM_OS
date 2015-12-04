@@ -71,6 +71,7 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 	while(1) {
 		//printf("[main]nothing to do, call schedule!\n");
 		waitpid(kinit_pid);
+		printf("haha, I will never die!\n");
 		kinit_pid = kernel_thread(run_init_process, "init_process");
 		schedule();
 	}

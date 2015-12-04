@@ -32,12 +32,12 @@ void test_tarfs() {
 
 	printf("file %s first 100 bytes:\n", filename);
 	for (i = 0; i< 100; i++)
-		printf("%c",buf+i);
+		printf("%c",*((char *)buf+i));
 
 	printf("file %s second 100 bytes:\n", filename);
 	buf = tarfs_read(fd, 100);
 	for (i = 0; i< 100; i++)
-		printf("%c",buf+i);
+		printf("%c",*((char *)buf+i));
 	
 	return;
 }
@@ -110,7 +110,7 @@ void *traverse_tarfs(char *filename, void *start_addr, int (*checker)(const char
 }
 
 int tarfs_open(char *filename, char *mode) {
-	int i, type, skip = 0;
+	int i, type, skip = 0, len;
 	int isroot = 0;
 	void *res = NULL;
 	char newfname[NAME_SIZE];
@@ -155,7 +155,12 @@ int tarfs_open(char *filename, char *mode) {
 				type = FT_DIR;
 			} else {
 				current->file_array[i].start_addr = res + TARFS_HEADER;
-				strncpy(current->file_array[i].name, newfname, strlen(newfname));
+				len = strlen(newfname);
+				if (type == FT_DIR && newfname[len - 1] != '/') {
+					newfname[len++] = '/';
+					newfname[len] = '\0';
+				}
+				strncpy(current->file_array[i].name, newfname, len);
 #ifdef DEBUG_TARFS
 				printf("[tarfs_open] filename stored:%s\n", current->file_array[i].name);
 #endif
@@ -176,7 +181,9 @@ int tarfs_open(char *filename, char *mode) {
 		}
 	}
 
-	panic("ERROR:[in tarfs_open] no free file struct cache!\n");
+	printf("ERROR:[in tarfs_open] no free file struct cache!\n");
+	exit_st(current, 1);
+
 	return -1;
 }	
 
