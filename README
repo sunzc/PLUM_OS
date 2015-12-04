@@ -1,17 +1,22 @@
 Author: Zhichuang Sun
 SBUID: 110345185
-Date:   Oct 1, 2015
-SBU OS Project : Warmup2
+Date:   Dec 4, 2015
+SBU OS Project: SBUNIX 
 Description:
-	Implement kernel printf()
-	Implement timer ISR
-	Implement keyboard ISR
+	I've a dream that one day I can build my OS totally from scratch. Today it come true!
+	Thanks a lot for Prof. Ferdman and all other diligent guys with whom I discuss and learn on piazza!
+	Enjoy it!
 
-For Grading Consideration:
-	Some of the code that deal with the configuration of hardware is borrowed:
-		sys/itimer.c borrowed from xv6, which configure the mode and frequency of Programmable Interval Timer(8253/8254)
-		sys/pic.c    borrowed from xv6, which configure the pic, especially the four config word needed by 8259PIC
-		include/sys/kbd.h scan code map borrowed xv6/kbd.h
+For test consideration:
+	Besides the required app:
+		ls, cat, sbush
+	I add some other programs:
+		hello, testfork, testread, test.sh
+bin/
+	hello		# it print 'Hello World!'
+	testfork	# it fork a new process and do execve(bin/hello) in it and then exit.
+	testread	# it keeps accepts input and repeat what it read from stdin.
+	test.sh		# it contains a line of shell code, you can run it with `sbush test.sh`
 
 The provided Makefile:
   1) builds a kernel
