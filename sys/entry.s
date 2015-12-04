@@ -55,7 +55,6 @@ __syscall_handler:
 	movq %rax,%rdi
 	movq %rsp,%rsi
 	call syscall_handler 
-	sti
 	popq %rbp
 	popq %r15
 	popq %r14
@@ -73,11 +72,11 @@ __syscall_handler:
 	movq %rsp,0x18(%r12)	# store rsp into current->kernel_stack
 	movq 0x20(%r12),%rsp	# load rsp from current->user_stack
 	popq %r12
+	sti
 	sysretq	
 
 .global ret_from_fork
 ret_from_fork:
-	sti
 	popq %rbp
 	popq %r15
 	popq %r14
@@ -96,4 +95,5 @@ ret_from_fork:
 	movq 0x20(%r12),%rsp	# load rsp from current->user_stack
 	popq %r12
 	movq $0x0,%rax
+	sti
 	sysretq

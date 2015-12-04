@@ -1,9 +1,15 @@
 #ifndef _TARFS_H
 #define _TARFS_H
 
+#define FT_DIR	0
+#define FT_FILE	1
+#define FILE_NAME_SIZE	128	
+#define ROUND_TO_512(n) ((n + 512 - 1) & ~(512 - 1))
 typedef struct tarfs_file{
 	char mode[16];
+	char name[FILE_NAME_SIZE];
 	int free;
+	int type;
 	void *start_addr;
 	uint64_t size;
 	uint64_t pos;	
@@ -11,7 +17,6 @@ typedef struct tarfs_file{
 
 typedef tarfs_file file;
 
-#define MAX_TARFS_FILE	20
 #define START_FD	3	/* skip 0, 1, 2 on purpose */
 #define TARFS_HEADER	512
 
@@ -43,5 +48,6 @@ int tarfs_open(char *filename, char *mode);
 void *tarfs_read(int fd, uint64_t size);
 void tarfs_close(int fd);
 void test_tarfs();
-
+void *traverse_tarfs(char *filename, void *start_addr, int (*f)(const char *, const char *), int *);
+uint64_t get_filesz(struct posix_header_ustar *p);
 #endif

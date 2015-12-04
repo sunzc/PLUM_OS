@@ -62,12 +62,16 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 		schedule();
 	}
 */
-	__asm volatile("sti"::);
+//	__asm volatile("sti"::);
 	kernel_thread(thread_idle, "idle");
-	kernel_thread(run_init_process, "init_process");
+
+	int kinit_pid;
+	kinit_pid = kernel_thread(run_init_process, "init_process");
 
 	while(1) {
 		//printf("[main]nothing to do, call schedule!\n");
+		waitpid(kinit_pid);
+		kinit_pid = kernel_thread(run_init_process, "init_process");
 		schedule();
 	}
 }
@@ -75,20 +79,27 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 void run_init_process() {
 	printf("process name: %s\n", current->name);
 //	exec("bin/sbush");
-	char *arg0 = "bin/testfork";
-	char *arg1 = "--test";
-	char *env0 = "PATH=bin/:libc/";
+//	char *arg0 = "bin/ls";
+	char *arg0 = "bin/sbush";
+//	char *arg0 = "bin/testfork";
+//	char *arg1 = "bin/";
+	char *env0 = "HOME=/";
 	char *env1 = "USER=zhisun";
-	char *argv[3], *envp[3];
+	char *env2 = "PATH=/bin/:/lib/";
+	char *argv[3], *envp[4];
 
 	argv[0] = arg0;
-	argv[1] = arg1;
-	argv[2] = NULL;
+//	argv[1] = arg1;
+//	argv[2] = NULL;
+	argv[1] = NULL;
 	envp[0] = env0;
 	envp[1] = env1;
-	envp[2] = NULL;
+	envp[2] = env2;
+	envp[3] = NULL;
 
-	exec("bin/testread", argv, envp);
+//	exec("bin/testfork", argv, envp);
+	exec("bin/sbush", argv, envp);
+//	exec("bin/ls", argv, envp);
 }
 
 void thread_A() {

@@ -23,12 +23,16 @@ void page_fault_handler(uint64_t addr, uint64_t ecode, uint64_t eip) {
 				map_a_page(vma, addr);
 				return;
 			} else {
+#ifdef DEBUG_PGFAULT
 				printf("pagefault: no vma matched, page not accessable!\n");
-				goto bad_area;
+#endif
+				goto user_bad_area;
 			}
 
 		} else if (ecode & PFEC_RW) {	/* vialation in page level, write non-writable page */
+#ifdef DEBUG_PGFAULT
 			printf("pagefault: vialation found, write non-writable page!\n");
+#endif
 			/* handle copy-on-write here */
 
 			/* assert addr has been mapped */
@@ -64,22 +68,31 @@ void page_fault_handler(uint64_t addr, uint64_t ecode, uint64_t eip) {
 				flush_tlb();
 				return;
 			} else /* real vialation happen, can't handle it !*/
-				goto bad_area;
+				goto user_bad_area;
 		} else
+#ifdef DEBUG_PGFAULT
 			printf("[page_fault_handler] user level pagefault, present, no vialation. It's strange,\
 				 we should not reach here!\n");
+#endif
+		goto user_bad_area;
 	} else {
 		/**
 		 * page fault happened in kernel mode is usually a real fault, except for some special
 		 * case, like copy data from kernel to user. we leave it for furture. By now, we just
 		 * panic.
 		 */
+#ifdef DEBUG_PGFAULT
 		printf("ERROR: page fault in kernel mode!");
-		goto bad_area;
+#endif
+		goto kernel_bad_area;
 	}
 
-bad_area:
-	printf("pagefault info addr: 0x%lx, ecode: 0x%lx, eip: 0x%lx\n", addr, ecode, eip);
+user_bad_area:
+	printf("Segmentation Fault!\n");
+	exit_st(current, -1);
+
+kernel_bad_area:
+	printf("pagefault info addr: 0x%lx, ecode: 0x%lx, eip: 0x%lx, current:%lx, mm:%lx\n", addr, ecode, eip, current, current->mm);
 	panic("ERROR: unable to handle this pagefault!");
 	return;	
 }

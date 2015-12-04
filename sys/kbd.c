@@ -19,6 +19,7 @@ int stdin_buf_state = 0;
 
 /* if process wait for stdin, it will sleep here */
 extern task_struct *wait_stdin_list;
+extern task_struct *current;
 
 void kbdinit(void) {
 	stdin_buf = (char *)get_zero_page();
@@ -42,21 +43,21 @@ void kbdintr(void) {
 		return;
 	}
 	data = inb(KBD_DATA_PORT);
+
+////////////////	printf("key pressed:0x%x\n",data);
 	
 	if(is_normal_key_pressed(data))
 		normal_key_pressed = data;
 	else if (is_special_key_pressed(data))
 		special_key_pressed = data;
 	else if (is_normal_key_released(data) && special_key_pressed == 0) {
-//		put_to_screen(' ', 64, 24, 0);
-//		put_to_screen(normalmap[normal_key_pressed], 65, 24, 0);
 		if(normal_key_pressed != 0xe) {	// backspace
 			print_to_screen(normalmap[normal_key_pressed]);
 			stdin_buf[stdin_buf_size++] = normalmap[normal_key_pressed];
-			if(normal_key_pressed == 0x39) {	// '\n' 0x9c 0x39 ' '
-				stdin_buf[stdin_buf_size++] = '\n';
+			if(normal_key_pressed == 0x1c) {	// '\n' 0x9c 0x39 ' '
 				stdin_buf_state = 1; //BUF_READY
-				wakeup(&wait_stdin_list, NULL, 0);
+				if (wait_stdin_list != NULL)
+					wakeup(&wait_stdin_list, NULL, 0);
 			}
 		} else {
 			print_to_screen(0xe);
@@ -68,10 +69,8 @@ void kbdintr(void) {
 			// to make life easier, we handle special key when either normal key or special key
 			// released
 			case 0x2A: // Shift
-				print_to_screen(normalmap[normal_key_pressed]);
+				print_to_screen(shiftmap[normal_key_pressed]);
 				stdin_buf[stdin_buf_size++] = shiftmap[normal_key_pressed];
-//				put_to_screen(' ', 64, 24, 0);
-//				put_to_screen(shiftmap[normal_key_pressed], 65, 24, 0);
 				break;
 			case 0x38: // Alt
 				put_to_screen('@', 64, 24, 0);
@@ -79,22 +78,29 @@ void kbdintr(void) {
 				break;
 			case 0x1D: // Ctrl
 				put_to_screen('^', 64, 24, 0);
-				put_to_screen(normalmap[normal_key_pressed], 65, 24, 0);
+				put_to_screen(shiftmap[normal_key_pressed], 65, 24, 0);
+				printf("@0x%x\n", normal_key_pressed);
+				if (normal_key_pressed == 0x2e) { //Ctrl^C, kill user-process
+					if(wait_stdin_list != NULL)
+						kill_by_pid(wait_stdin_list->pid, SIGTERM);
+					else if(current->mm != NULL)
+						kill_by_pid(current->pid, SIGTERM);
+					// else do nothing
+				}
 				break;
 		}
 
 		normal_key_pressed = 0;
 		special_key_pressed = 0;
+
 	} else if (is_special_key_released(data)) {
 		if (normal_key_pressed) { // clear normal key too, we handle it when both are pressed
 			switch(special_key_pressed) { 
 				// to make life easier, we handle special key when either normal key or special key
 				// released
 				case 0x2A: // Shift
-					print_to_screen(normalmap[normal_key_pressed]);
+					print_to_screen(shiftmap[normal_key_pressed]);
 					stdin_buf[stdin_buf_size++] = shiftmap[normal_key_pressed];
-					//put_to_screen(' ', 64, 24, 0);
-					//put_to_screen(shiftmap[normal_key_pressed], 65, 24, 0);
 					break;
 				case 0x38: // Alt
 					put_to_screen('@', 64, 24, 0);
@@ -102,7 +108,10 @@ void kbdintr(void) {
 					break;
 				case 0x1D: // Ctrl
 					put_to_screen('^', 64, 24, 0);
-					put_to_screen(normalmap[normal_key_pressed], 65, 24, 0);
+					put_to_screen(shiftmap[normal_key_pressed], 65, 24, 0);
+					printf("@0x%x\n", normal_key_pressed);
+					if (normal_key_pressed == 0x2e)	// Ctrl^C
+						kill_by_pid(wait_stdin_list->pid, SIGTERM );
 					break;
 			}
 
@@ -111,8 +120,6 @@ void kbdintr(void) {
 
 		special_key_pressed = 0; // clear it
 	}
-
-	//printf("in kbdintr: data is %x\n", data);
 
 	pic_sendeoi(33);
 

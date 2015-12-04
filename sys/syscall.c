@@ -2,14 +2,31 @@
 #include <sys/syscall.h>
 #include <sys/proc.h>
 #include <sys/string.h>
+#include <sys/tarfs.h>
 
 //#define DEBUG_SYSCALL
 #define BUF_READY	1
 #define BUF_NOT_READY	0
 
+/* file operation related */
+#define EOF	0
+enum { O_RDONLY = 0, O_WRONLY = 1, O_RDWR = 2, O_CREAT = 0x40, O_DIRECTORY = 0x10000 };
+
+// directories
+#define NAME_MAX 255
+struct  __attribute__((__packed__)) dirent {
+  long d_ino;
+  off_t d_off;
+  unsigned short d_reclen;
+  char d_name [NAME_MAX+1];
+};
+
+
 extern task_struct *current;
 extern task_struct *task_headp;
+extern task_struct *sleep_task_list;
 extern task_struct *wait_stdin_list;
+extern task_struct *zombie_list;
 extern int pid_count;
 
 extern int stdin_buf_state;
@@ -39,13 +56,33 @@ extern void ret_from_fork(void);
 
 uint64_t syscall_handler(int syscall_num, sc_frame *sf);
 uint64_t sys_null(int num);
+
+/* file system related */
+uint64_t open(sc_frame *);
 uint64_t read(sc_frame *);
 uint64_t write(sc_frame *);
+uint64_t close(sc_frame *);
+uint64_t getdents(sc_frame *);
+uint64_t getcwd(sc_frame *);
+uint64_t chdir(sc_frame *);
+
+/* memory related */
 uint64_t brk(sc_frame *);
+
+/* process related */
 uint64_t fork (sc_frame *sf);
 uint64_t execve(sc_frame *sf);
-void read_stdin(char *buf, int size);
-void copy_from_kernel(char *ubuf, char *kbuf, int size);
+uint64_t wait(sc_frame *sf);
+void exit(sc_frame *sf);
+uint64_t kill(sc_frame *sf);
+uint64_t getpid(sc_frame *sf);
+uint64_t getppid(sc_frame *sf);
+
+/* other helper functions */
+uint64_t read_stdin(char *buf, int size);
+int copy_from_kernel(char *ubuf, char *kbuf, int size);
+void copy_from_user(char *kbuf, char *ubuf, int size);
+int belongs_to_dir(const char *dirname, const char *name);
 
 void copy_mm(mm_struct *new, mm_struct *old);
 void copy_vma_deep(vma_struct *new_vmap, pgd_t *new_pgd, vma_struct *old_vmap, pgd_t *old_pgd);
@@ -131,13 +168,28 @@ void init_syscall() {
 }
 
 uint64_t syscall_handler(int syscall_num, sc_frame *sf) {
-	uint64_t res;
+	uint64_t res = 0;
 	switch(syscall_num) {
-		case SYS_read: 
+		case SYS_open:
+			res = open(sf);
+			break;
+		case SYS_read:
 			res = read(sf);
 			break;
-		case SYS_write: 
+		case SYS_write:
 			res = write(sf);
+			break;
+		case SYS_close:
+			res = close(sf);
+			break;
+		case SYS_getdents:
+			res = getdents(sf);
+			break;
+		case SYS_getcwd:
+			res = getcwd(sf);
+			break;
+		case SYS_chdir:
+			res = chdir(sf);
 			break;
 		case SYS_brk:
 			res = brk(sf);
@@ -148,6 +200,21 @@ uint64_t syscall_handler(int syscall_num, sc_frame *sf) {
 		case SYS_execve:
 			res = execve(sf);
 			break;
+		case SYS_wait4:
+			res = wait(sf);
+			break;
+		case SYS_exit:
+			exit(sf);
+			break;
+		case SYS_kill:
+			res = kill(sf);
+			break;
+		case SYS_getpid:
+			res = getpid(sf);
+			break;
+		case SYS_getppid:
+			res = getppid(sf);
+			break;
 		default:
 			res = sys_null(syscall_num);
 			break;
@@ -156,51 +223,114 @@ uint64_t syscall_handler(int syscall_num, sc_frame *sf) {
 	return res;
 }
 
-/* page fault may happen, it's buggy TODO */
-void copy_from_kernel(char *ubuf, char *kbuf, int size) {
+/* page fault may happen, it's buggy TODO hope ubuf doesn't cross page*/
+void copy_from_user(char *kbuf, char *ubuf, int size) {
 	int i = 0;
 	vma_struct *vma;
 
+#ifdef DEBUG_SYSCALL
+	printf("ubuf:0x%lx, kbuf:0x%lx\n",ubuf, kbuf);
+#endif
 	vma = search_vma((uint64_t)ubuf, current->mm);
 	if (vma != NULL)
 		map_a_page(vma, (uint64_t)ubuf);
 
-	//printf("ubuf:0x%lx, kbuf:0x%lx\n",ubuf, (uint64_t)(&kbuf));
+
+	for (i = 0; i < size; i++)
+			*(kbuf + i) = *(ubuf + i);
+}
+
+/* page fault may happen, it's buggy TODO hope ubuf doesn't cross page*/
+int copy_from_kernel(char *ubuf, char *kbuf, int size) {
+	int i = 0;
+	vma_struct *vma;
+
+#ifdef DEBUG_SYSCALL
+	printf("ubuf:0x%lx, kbuf:0x%lx, current:0x%lx, mm:0x%lx\n",ubuf, kbuf, current, current->mm);
+#endif
+	vma = search_vma((uint64_t)ubuf, current->mm);
+	if (vma != NULL)
+		map_a_page(vma, (uint64_t)ubuf);
+	else {
+		printf("[copy_from_kernel]wrong parameter! ubuf:0x%lx\n");
+		return -1;
+	}
+
 
 	for (i = 0; i < size; i++)
 			*(ubuf + i) = *(kbuf + i);
+	return 0;
 }
 
-void read_stdin(char *buf, int size) {
+uint64_t read_stdin(char *buf, int size) {
+	uint64_t readsz;
 	int i = 0;
 
 	//printf("read_stdin:buf:0x%lx, size : 0x%lx\n", (uint64_t)buf, size);
 	if (size >= stdin_buf_size) {
-		copy_from_kernel(buf, stdin_buf, stdin_buf_size);
+		if (copy_from_kernel(buf, stdin_buf, stdin_buf_size) != 0)
+			return -1;
 		stdin_buf_size = 0;
+		readsz = stdin_buf_size;
 
 		/* only when buffer is empty, set it not ready */
 		stdin_buf_state = BUF_NOT_READY;
 	} else {
-		copy_from_kernel(buf, stdin_buf, size);
+		if (copy_from_kernel(buf, stdin_buf, size) != 0)
+			return -1;
 		for (i = size; i < stdin_buf_size; i++)
 			stdin_buf[i-size] = stdin_buf[i];
 
 		stdin_buf_size -= size;
+		readsz = size;
 	}
+
+	return readsz;
+}
+
+uint64_t open(sc_frame *sf) {
+	int fd;
+	char *path;
+	uint64_t flag;
+	uint64_t mode;
+
+	path = (char *)(sf->rdi);
+	flag = sf->rsi;
+	mode = sf->rdx;
+
+	/* only allow read access */
+	assert(flag == O_RDONLY);
+
+	/* only allow default mode */
+	assert(mode == 0);
+
+#ifdef DEBUG_SYSCALL
+	printf("[open] path:%s\n",path);
+#endif
+	fd = tarfs_open(path, "r");
+
+	return (uint64_t)fd;
 }
 
 /* fd 0: stdin, 1: stdout, 2: stderr */
 uint64_t read(sc_frame *sf) {
-	uint64_t res = 0;
 	int fd;
 	char *buf;
-	uint64_t size;
+	void *p;
+	uint64_t size, readsz;
 	//printf("syscall read!\n");
 
 	fd = (int)(sf->rdi);
 	buf = (char *)(sf->rsi);
 	size = sf->rdx;
+	readsz = 0;
+
+	/* can't read stdout and stderr */
+	assert(fd != 1 && fd != 2);
+
+	/* undefined error: size == 0 */
+	if (size == 0)
+		return -1;
 
 	if (fd == 0) { /* read from stdin */
 		/* do we need lock here to guarantee ATOMICALITY TODO */
@@ -208,15 +338,29 @@ uint64_t read(sc_frame *sf) {
 			sleep(&wait_stdin_list, 0);
 		}
 
-		read_stdin(buf, size);
-
-		res = size;
+		readsz = read_stdin(buf, size);
 	} else {
-		/* TODO */
-		printf("[read] do not support non-stdin read, so far \n");
+		assert(current->file_array[fd].type == FT_FILE);
+
+		/* check if we are at filetail */
+		if (current->file_array[fd].pos == current->file_array[fd].size)	// EOF
+			return EOF;
+
+		if (current->file_array[fd].pos + size <= current->file_array[fd].size)
+			readsz = size;
+		else
+			readsz = current->file_array[fd].size - current->file_array[fd].pos;
+
+		/* move read pointer */
+		current->file_array[fd].pos += readsz;
+
+		/* copy data from kernel to user buf */
+		p = current->file_array[fd].start_addr + current->file_array[fd].pos;
+		if (copy_from_kernel(buf, p, readsz) != 0)
+			return -1;
 	}
 
-	return res;
+	return readsz;
 }
 
 /* only support write to stdout TODO */
@@ -233,10 +377,206 @@ uint64_t write(sc_frame *sf) {
 	return res;
 }
 
+/* close file */
+uint64_t close(sc_frame *sf) {
+	int fd = (int)(sf->rdi);
+
+	/* does not allow close stdin, stdout, stderr */
+	assert(fd != 0 && fd != 1 && fd != 2);
+
+	tarfs_close(fd);
+	return 0;
+}
+
+/* return 0 on success */
+uint64_t chdir(sc_frame *sf) {
+	char *path = (char *)(sf->rdi);
+	char cwd[NAME_SIZE];
+	int fd;
+	int len;
+
+	copy_from_user(cwd, path, NAME_SIZE);
+	//printf("[chdir] cwd:%s\n",cwd);
+
+	len = strlen(cwd);
+	// support cd .. but not cd ../../
+	if (len >= 3 && cwd[len - 1] == '.' && cwd[len-2] == '.' && cwd[len-3] == '/') {
+		len = len - 3;
+		//skip duplicate '//'
+		while(cwd[len] == '/')
+			len--;
+
+		// go back one directory
+		while(len >= 0 && cwd[len] != '/')
+			len--;
+
+		if(len >= 0)
+			cwd[len + 1] = '\0';
+		else
+			return -1;
+	}
+
+	/* validate whether it's a legal path, no access control here */
+	if ((fd = tarfs_open(cwd,"r")) > 0) {
+		tarfs_close(fd);
+		strncpy(current->cwd, cwd, strlen(cwd));
+		return 0;
+	} else
+		return -1;
+}
+
+uint64_t getcwd(sc_frame *sf) {
+	char *path = (char *)(sf->rdi);
+	int size = (int)(sf->rsi);
+	int len;
+
+	len = strlen(current->cwd);
+	assert(len <= size);
+	/* when copy string, we should copy the ending '\0' */
+	if (copy_from_kernel(path, current->cwd, len + 1) != 0)
+		return -1;
+
+	return (uint64_t)len;
+}
+
+/**
+ * this is a comparator function, test whether name is in
+ * the format of dirname/bla, and bla should not contain '/'.
+ * which means it belongs to dir/
+ * we should always handle the special root directory, which is faked by us.
+ * 0: means true, 1 means not true;
+ */
+int belongs_to_dir(const char *dirname, const char *name) {
+	int i;
+	int len, len1;
+
+#ifdef DEBUG_SYSCALL
+	printf("[belongs_to_dir] dirname:%s, name:%s\n",dirname, name);
+#endif
+
+	len = strlen(dirname);
+	len1 = strlen(name);
+
+	if ((len == 0) || (len1 == 0))
+		return 1;
+
+	if (strcmp(dirname, "/") == 0) { // special case, faked root '/'
+		for(i = 0; i < len1; i++)
+			if (name[i] == '/' && name[i+1] !='\0') // not end with /, like bin/, but contains /, that's not what we want
+				return 1;
+			else if(name[i] == '/' && name[i+1] == '\0')
+				return 0;
+			else // name[i] != '/'
+				continue;
+		return 0;	// does not contains / at all, that's a file under root '/'
+	}
+
+	// given bin/, we want bin/bla, bin/bla/, but not bin/bla/blabla
+	if (strncmp(dirname, name, len) == 0) {
+		for(i = len; i < len1; i++)
+			if (name[i] == '/' && name[i+1] == '\0')	// case :bin/bla/
+				return 0;
+			else if(name[i] == '/' && name[i+1] != '\0')	// case :bin/bla/blabla
+				return 1;
+			else
+				continue;
+		return 0;	// case: bin/bla
+	} else
+		return 1;	//case: other/bla, not start with bin/
+}
+
+/* read dents */
+uint64_t getdents(sc_frame *sf) {
+	int fd = (int)(sf->rdi);
+	char *dp = (char *)(sf->rsi);
+	int buf_size = (int)(sf->rdx);
+
+	int type;
+	void *start, *res;
+	int readsz;
+	char dirname[FILE_NAME_SIZE] = {0};
+	int len, len1;
+
+	void *kbuf = get_zero_page();
+
+	/**
+	 * we don't support real r/w filesystem, only tarfs here.
+	 * However, tarfs has no idea of directory, neither dirents, so we have to 
+	 * fake it.
+	 * when the file type is directory, the pos means something else, it points to the
+	 * header of a file header in tarfs.
+	 * Remember, we judge whether a file belongs to a directory by its name dir, dir/filename
+	 */
+
+	/* assert it's a legal directory */
+	assert(fd >= START_FD && fd < MAX_FILE_NUM);
+	assert(current->file_array[fd].type == FT_DIR);
+
+	len = strlen(current->file_array[fd].name);
+	strncpy(dirname, current->file_array[fd].name, len);
+
+#ifdef DEBUG_SYSCALL
+	printf("[getdents]dirname:%s, original name:%s\n",dirname, current->file_array[fd].name);
+#endif
+	/* start traverse the tarfs, and find file that with name beginning with dirname/ */
+	start = current->file_array[fd].start_addr + current->file_array[fd].pos;
+	res = traverse_tarfs(dirname, start, belongs_to_dir, &type);
+	if (res != NULL) {
+		if (type == FT_DIR)
+			current->file_array[fd].pos = res - current->file_array[fd].start_addr + TARFS_HEADER;
+		else if(type == FT_FILE)
+			current->file_array[fd].pos = res - current->file_array[fd].start_addr + ROUND_TO_512(get_filesz(res)) + TARFS_HEADER;
+		else {
+			printf("[getdents] unknown filetype!\n");
+			return -1;
+		}
+	} else	// no more dirent found
+		return 0;
+
+	/* fill in the dirents */
+	readsz = sizeof(struct dirent);
+	assert(readsz <= buf_size);
+
+	/**
+	 * d_ino should contains the inode info, but we use it to contain the file type info instead
+	 * for we don't inode.
+	 * NOTE user process will check if it's 0, so it should not be 0.
+	 */
+	((struct dirent *)kbuf)->d_ino = type + 1;
+	((struct dirent *)kbuf)->d_off = readsz;
+	((struct dirent *)kbuf)->d_reclen = readsz;
+	len1 = strlen(((struct posix_header_ustar *)res)->name);
+	assert(len1 < NAME_MAX + 1); 
+	if (strcmp(dirname, "/") == 0) {
+		/**
+		 * that means we should copy the entire name, note: tarfs filename doesn't start with '/'
+		 * otherwise we need to remove prefix, possible dirname /, res->name bin/
+		 */
+		strncpy(((struct dirent *)kbuf)->d_name, ((struct posix_header_ustar *)res)->name, len1);
+	} else {
+		/* possible dirname /bin, tarfs filename bin/hello , get hello out of it*/
+		strncpy(((struct dirent *)kbuf)->d_name, ((struct posix_header_ustar *)res)->name + len, len1 - len);
+	}
+
+	if (copy_from_kernel(dp, kbuf, readsz) != 0)
+		return -1;
+
+#ifdef DEBUG_SYSCALL
+	printf("res->name:%s\n", ((struct posix_header_ustar *)res)->name);
+	printf("d_name:%s\n",((struct dirent *)kbuf)->d_name);
+#endif
+
+	/* reclaim kernel page */
+	free_page((uint64_t)VA2PA(kbuf) >> PG_BITS);
+
+	return (uint64_t)readsz;
+}
+
 uint64_t sys_null(int num) {
 	int res = 0;
 	printf("syscall num = %d, not supportted yet!\n", num);
 
+	panic("BUG!");
 	while(1) {
 		printf("I come into unsupported syscall, so yield. call schedule\n");
 		schedule();
@@ -249,11 +589,12 @@ uint64_t sys_null(int num) {
  */
 #define HEAP_LIMIT	0x7ffffff00000
 uint64_t brk(sc_frame *sf) {
-	uint64_t new_break, cur_break;
+	uint64_t new_break, heap_start,cur_break;
 	vma_struct *vma;
 
 	new_break = sf->rdi;
-	cur_break = current->mm->user_heap;
+	heap_start = current->mm->user_heap;
+	cur_break = current->mm->brk;
 
 #ifdef DEBUG_SYSCALL
 	printf("[brk] new_break : 0x%lx, cur_break: 0x%lx\n", new_break, cur_break);
@@ -269,8 +610,7 @@ uint64_t brk(sc_frame *sf) {
 	if (new_break == 0)
 		return cur_break;
 	else if (new_break > cur_break && new_break < HEAP_LIMIT) {	/* add or extend vma */
-		vma = search_vma(cur_break - 1, current->mm);
-		if (vma == NULL || (vma->prot & PTE_RW) == 0 || vma->vm_file != NULL) {
+		if (cur_break == heap_start) {	//haven't alloc vma for heap yet.
 			/**
 			 * no vma alloced yet, alloc one.
 			 * it's tricky here, when vma->vm_file!=NULL, it's data seg
@@ -285,12 +625,13 @@ uint64_t brk(sc_frame *sf) {
 			vma->vm_align = PG_SIZE;
 
 			insert_vma(vma, current->mm);
-
-		} else if (vma->prot & PTE_RW) {	/* ok, it's the writable data vma we want to extend */
+		} else {	// extend heap
+			vma = search_vma(cur_break - 1, current->mm);
+			assert((vma != NULL) && ((vma->prot & PTE_RW) == 1) && (vma->vm_file == NULL));
+			/* ok, it's the writable data vma we want to extend */
 			if (vma->vm_end < new_break)
 				vma->vm_end = new_break;
 		}
-
 		return new_break;
 
 	} else if (new_break > HEAP_LIMIT)
@@ -377,6 +718,7 @@ uint64_t fork (sc_frame *sf) {
 
 	/* copy father opened file to child */
 	copy_file_array(tsp, current);
+	strncpy(tsp->cwd, current->cwd, strlen(current->cwd));
 
 	/* copy mm_struct */
 	if ((tsp->mm = (mm_struct *)get_zero_page()) == NULL)
@@ -387,7 +729,6 @@ uint64_t fork (sc_frame *sf) {
 	tsp->mm->entry = current->mm->entry;
 	tsp->mm->pgd = alloc_pgd();
 	tsp->mm->mm_count = current->mm->mm_count;
-	tsp->mm->highest_vm_end = current->mm->mm_count;
 	tsp->mm->code_start = current->mm->code_start;
 	tsp->mm->code_end = current->mm->code_end;
 	tsp->mm->data_start = current->mm->data_start;
@@ -402,17 +743,19 @@ uint64_t fork (sc_frame *sf) {
 
 	/* will be adjusted later, should be the lowest userable address above .text .data segments */
 	tsp->mm->user_heap = current->mm->user_heap;
+	tsp->mm->brk = current->mm->brk;
 
 	/* copy vma and mark cow */
 	copy_mm(tsp->mm, current->mm);
 
-	/* flush tlb here, or we can't catch exception for COW */
+	/* flush tlb here, or we can't catch exception for COW TODO*/
+	flush_tlb();
+
+	/* change process state */
+	tsp->state = ACTIVE;
 
 	/* insert new task struct at the head of the list */
-	tsp->next = task_headp;
-	task_headp->prev = tsp;
-	tsp->prev = NULL;
-	task_headp = tsp;
+	add_to_tasklist(&task_headp, tsp);
 
 	return tsp->pid;
 }
@@ -551,4 +894,121 @@ uint64_t execve(sc_frame *sf) {
 
 	return 0;
 
+}
+
+/* wait for child process's state change, like terminate */
+uint64_t wait(sc_frame *sf) {
+	int pid = (int)(sf->rdi);
+
+//	ignore status, options
+//	int options = (int)(sf->rdx);
+//	int *status = (int *)(sf->rsi);
+
+	// status comes from user space
+/*	vma_struct *vma;
+
+	printf("[wait]status addr:0x%lx\n",status);
+	vma = search_vma((uint64_t)status, current->mm);
+	if (vma != NULL)
+		map_a_page(vma, (uint64_t)status);
+	else
+		panic("[wait]ERROR status is an invalid address!\n");
+
+	*status =  waitpid(pid);
+*/
+	waitpid(pid);
+
+	return 0;
+}
+
+uint64_t waitpid(int pid) {
+	task_struct *child;
+	int status;
+
+	/* ignore status and options */
+	child = find_process_by_pid(pid, task_headp);
+	if (child == NULL)
+		child = find_process_by_pid(pid, sleep_task_list);
+	if (child == NULL)
+		child = find_process_by_pid(pid, wait_stdin_list);
+	if (child == NULL) {
+		printf("can't find child process with pid :%d\n", pid);
+		return -1;
+	}
+
+	// we are not waiting for timer, so set time: -1, set child, hope it will wait me up
+	child->waited = 1;
+	sleep(&sleep_task_list,  -1);
+
+	status = child->exit_status;
+
+	free_process(child);
+
+	return status;
+}
+
+/* father will free me */
+void exit(sc_frame *sf) {
+	int status = (int)(sf->rdi);
+	exit_st(current, status);
+}
+
+void exit_st(task_struct *ts, int status) {
+	task_struct *father;
+
+	ts->exit_status = status;
+	ts->state = ZOMBIE;
+	remove_from_tasklist(&task_headp, ts);
+	add_to_tasklist(&zombie_list, ts);
+
+	if (ts->waited == 1) {
+		father = find_process_by_pid(ts->ppid, sleep_task_list);
+		if (father == NULL) {
+			// we need notify init to adopt this orphon, but now we don't support it
+			// first mark meself, so that if init want to do it, he can do it
+			ts->orphan = 1;
+		} else
+			wakeup(&sleep_task_list, father, 1);
+	} else // no one wait for me , so mark myself orphan, let init adopt us.
+		ts->orphan = 1;
+
+	/* once schedule away, never come back, GOODBYE! */
+	schedule();
+}
+
+/* support kill to terminate process */
+uint64_t kill(sc_frame *sf) {
+	int pid = (int)(sf->rdi);
+	int sig = (int)(sf->rsi);
+
+	return kill_by_pid(pid, sig);
+}
+
+uint64_t kill_by_pid(int pid, int sig) {
+	task_struct *tsp;
+
+	tsp = find_process_by_pid(pid, task_headp);
+	if (tsp == NULL)
+		tsp = find_process_by_pid(pid, sleep_task_list);
+	if (tsp == NULL)
+		tsp = find_process_by_pid(pid, wait_stdin_list);
+	if (tsp == NULL) {
+		printf("[kill_by_pid] can't find child process with pid :%d\n", pid);
+		return -1;
+	}
+
+	// ignore all sig but terminate
+	if (sig == SIGTERM) {
+		tsp->sigterm = 1;
+	}
+
+	return 0;
+}
+
+uint64_t getpid(sc_frame *sf) {
+	return (uint64_t)(current->pid);
+}
+
+uint64_t getppid(sc_frame *sf) {
+	return (uint64_t)(current->ppid);
 }

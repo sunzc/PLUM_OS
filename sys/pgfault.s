@@ -6,6 +6,8 @@
 .align 4
 
 _page_fault_handler:
+	cli
+	pushq %rbp
 	pushq %rax
 	pushq %rbx
 	pushq %rcx
@@ -22,11 +24,10 @@ _page_fault_handler:
 	pushq %r15
 
 	movq %cr2,%rdi		#/* cr2 contain the address that cause page fault */
-	movq 0x70(%rsp),%rsi	#/* 0x70(%rsp) points to the error code pushed on stack before %rax */
-	movq 0x78(%rsp),%rdx		#/* exception ip for debug */
+	movq 0x78(%rsp),%rsi	#/* 0x70(%rsp) points to the error code pushed on stack before %rax */
+	movq 0x80(%rsp),%rdx		#/* exception ip for debug */
 	call page_fault_handler
 
-	sti
 	popq %r15 
 	popq %r14 
 	popq %r13 
@@ -41,5 +42,7 @@ _page_fault_handler:
 	popq %rcx
 	popq %rbx
 	popq %rax
+	popq %rbp
 	addq $0x8,%rsp		# pop error code
+	sti
 	iretq

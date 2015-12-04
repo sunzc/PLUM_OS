@@ -256,40 +256,40 @@ void deduct_page_ref(uint64_t pfn) {
 }
 
 uint64_t get_free_page() {
-	uint64_t bf_pfn_start = 0;
-	uint64_t bf_pfn_end = 159; 
-	uint64_t bkf_pfn_start = 256;
-	uint64_t bkf_pfn_end = 512;
+	//uint64_t bf_pfn_start = 0;
+	//uint64_t bf_pfn_end = 159; 
+//	uint64_t bkf_pfn_start = 256;
+//	uint64_t bkf_pfn_end = 512;
 	uint64_t normal_pfn_start = 671;
 	uint64_t normal_pfn_end = 32766;
 
 	uint64_t pfn = 0;
 
-	/* search boot area for free pages */
-	for (pfn = bf_pfn_start; pfn < bf_pfn_end; pfn++) {
-		if ((page_array + pfn)->ref == 0) {
-			/* mark page_array 1 */
-			(page_array + pfn)->ref = 1;
+	///* search boot area for free pages */
+	//for (pfn = bf_pfn_start; pfn < bf_pfn_end; pfn++) {
+	//	if ((page_array + pfn)->ref == 0) {
+	//		/* mark page_array 1 */
+	//		(page_array + pfn)->ref = 1;
 
-			/* mark bitmap busy */
-			bitmap[pfn/64] |= 1 << (pfn%64);
+	//		/* mark bitmap busy */
+	//		bitmap[pfn/64] |= 1 << (pfn%64);
 
-			return pfn;
-		}
-	}
+	//		return pfn;
+	//	}
+	//}
 
 	/* search before kernel image area for free pages */
-	for (pfn = bkf_pfn_start; pfn < bkf_pfn_end; pfn++) {
-		if ((page_array + pfn)->ref == 0) {
-			/* mark page_array 1 */
-			(page_array + pfn)->ref = 1;
-
-			/* mark bitmap busy */
-			bitmap[pfn/64] |= 1 << (pfn%64);
-
-			return pfn;
-		}
-	}
+//	for (pfn = bkf_pfn_start; pfn < bkf_pfn_end; pfn++) {
+//		if ((page_array + pfn)->ref == 0) {
+//			/* mark page_array 1 */
+//			(page_array + pfn)->ref = 1;
+//
+//			/* mark bitmap busy */
+//			bitmap[pfn/64] |= 1 << (pfn%64);
+//
+//			return pfn;
+//		}
+//	}
 
 	/* search boot area for free pages */
 	for (pfn = normal_pfn_start; pfn < normal_pfn_end; pfn++) {
@@ -374,7 +374,7 @@ void mm_init() {
 
 void switch_mm(task_struct *prev, task_struct *next) {
 	/* switch to a user process's address space */
-	if (next->mm == NULL)
+	if (next->mm == NULL || next->mm->pgd == NULL)
 		return;
 
 	if (prev != next) {
@@ -512,6 +512,7 @@ void map_vma(struct vm_area_struct *vma, pgd_t *pgd) {
 vma_struct *search_vma (uint64_t addr, mm_struct *mm) {
 	vma_struct *vma;
 
+	//printf("current:%lx,c->mm:%lx, mm: %lx, mmap:%lx\n",current, current->mm, mm, mm->mmap);
 	vma = mm->mmap;
 	while (vma != NULL) {
 		if (vma->vm_start <= addr && vma->vm_end > addr)
@@ -728,6 +729,8 @@ void unmap_mm(task_struct *tsp) {
 
 	/* free mm_struct */
 	tsp->mm = NULL;
+
+	flush_tlb();
 }
 
 void dump_stack(void *stack, int size) {

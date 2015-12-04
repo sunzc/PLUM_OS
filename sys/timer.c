@@ -2,6 +2,10 @@
 #include <sys/proc.h>
 #include <sys/pic.h>
 
+extern task_struct *current;
+
+#define DISPLAY_TIME
+
 static int sec = 0;
 static int min = 0;
 static int hour = 0;
@@ -9,7 +13,10 @@ static int hour = 0;
 static void write_time_to_screen (int h, int m, int s);
 
 void interrupt_handler_timer(void) {
-	ticks++;	
+
+	ticks++;
+
+#ifdef	DISPLAY_TIME
 	if (ticks % 100 == 0) {
 		sec++;
 		if (sec % 60 == 0) {
@@ -23,8 +30,16 @@ void interrupt_handler_timer(void) {
 		//printf(" %d: %d: %d\n", hour, min, sec);
 		write_time_to_screen(hour, min, sec);
 	}
-	pic_sendeoi(32);
-	return;
+#endif
+
+	if (current->timeslice == 10) {
+		current->timeslice = 0;
+		pic_sendeoi(32);
+		schedule();
+	} else {
+		current->timeslice += 1;
+		pic_sendeoi(32);
+	}
 }
 
 static void write_time_to_screen (int h, int m, int s) {

@@ -1,6 +1,21 @@
 #include <sys/sbunix.h>
 #include <sys/string.h>
 
+int strncmp (const char *dest, const char *src, size_t size){
+	int i = 0;
+
+	if(dest == NULL || src == NULL)
+		return -1;
+
+	while((dest[i] - src[i]) == 0 && i < strlen(dest) && i < strlen(src) && i < size)
+		i++;
+
+	if(i == size)
+		return 0;
+	else
+		return dest[i] - src[i];
+}
+
 int strcmp (const char *dest, const char *src){
         int i = 0;
 

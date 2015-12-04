@@ -5,7 +5,8 @@
 #define NUM_BUF 80
 
 #define MAX_COLUMN 	80
-#define MAX_ROW		25
+//#define MAX_ROW	25
+#define MAX_ROW		24
 
 #define VGA_BUFFER_ADDR 0xffffffff800b8000;
 

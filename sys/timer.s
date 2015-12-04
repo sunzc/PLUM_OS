@@ -21,8 +21,6 @@ _isr_wrapper_timer:
 
 	cld /*  C code following the sysV ABI requires DF to be clear on function entry */
 	call interrupt_handler_timer
-	call schedule
-	sti
 	popq %r15 
 	popq %r14 
 	popq %r13 
@@ -38,4 +36,5 @@ _isr_wrapper_timer:
 	popq %rbx
 	popq %rax
 	popq %rbp
+	sti
 	iretq

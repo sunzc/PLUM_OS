@@ -10,6 +10,7 @@ task_struct *task_headp = NULL;
 task_struct *current = NULL;
 task_struct *sleep_task_list = NULL;
 task_struct *wait_stdin_list = NULL;
+task_struct *zombie_list = NULL;
 extern void *pgd_start;
 extern void __ret_to_user(void *user_stack, void *user_entry);
 
@@ -39,6 +40,7 @@ void init_proc() {
 	/* pid keep growing */
 	task_headp->pid = pid_count++;
 	strncpy(task_headp->name, "init", 4);
+	strncpy(task_headp->cwd, "/", 1);
 
 	/* mm_struct describe vm structure of user process, kernel thread 's mm is NULL */
 	task_headp->mm = NULL;
@@ -63,6 +65,7 @@ int kernel_thread(void (*f)(void), char *thread_name) {
 		strncpy(tsp->name, thread_name, strlen(thread_name));
 	else
 		strncpy(tsp->name, "anonimous process", 20);
+	strncpy(tsp->cwd, "/", 1);
 	tsp->func = f;
 	if ((tsp->kernel_stack = get_zero_page()) == NULL)
 		return -1;
@@ -79,7 +82,7 @@ int kernel_thread(void (*f)(void), char *thread_name) {
 	tsp->prev = NULL;
 	task_headp = tsp;
 
-	return 0;
+	return tsp->pid;
 }
 
 
@@ -88,6 +91,11 @@ void schedule() {
 
 	me = current;
 	next = select_task_struct();
+
+	while (next->sigterm == 1) {
+		exit_st(next, 1);
+		next = select_task_struct();
+	}
 
 	/* give up, maybe no process to schedule */
 	if(next == me)
@@ -123,7 +131,11 @@ static task_struct * select_task_struct(void) {
 	task_struct *p;
 
 	/* choose next task in a round-robin way */
-	p = current;
+	if (find_process_by_pid(current->pid, task_headp) != NULL)
+		p = current;
+	else	//current not in active state
+		p = task_headp;
+
 	if(p->next != NULL)
 		return p->next;
 	else
@@ -143,6 +155,9 @@ void exec(char *filename, char *argv[], char *envp[]) {
 
 	/* future kernel stack */
 	void *future_kstack;
+
+	/* tmp kernel buffer to keep old argv, envp */
+	void *kbuf,*kargvp, *kenvpp, *kstart;
 
 	/* future user stack */
 	void *argvp, *envpp, *argcp;
@@ -171,8 +186,49 @@ void exec(char *filename, char *argv[], char *envp[]) {
 	/* we don't want to change file->pos, give size 0, we will get the file pointer at start pos 0 */
 	fp = tarfs_read(fd, 0);
 
-	/* free previous mm_struct */
-	unmap_mm(current);
+	/* before we cancell old mm_struct, we need first copy data to kernel space*/
+	if((kbuf = get_zero_page()) == NULL)
+		panic("[exec] alloc kbuf failed!");
+
+	/* map the user stack , we don't want demand paging or cow here */
+	if ((uint64_t)argv < 0x800000000000) { // only map when argv passed from user mode
+		vma = search_vma((uint64_t)argv, current->mm);
+		if (vma != NULL)
+			map_a_page(vma, (uint64_t)argv);
+		else
+			panic("[exec]ERROR:can't find valid vma for argv!");
+	}
+
+	/* toppest user address */
+	current->user_stack = 0x800000000000;
+
+	/* calculate stack */
+	arglist_size = get_strlist_size(argv); /* count ending '\0' into size */
+	envlist_size = get_strlist_size(envp);
+	argv_num = get_strlist_num(argv) + 1; /* reserve space for NULL */
+	envp_num = get_strlist_num(envp) + 1;
+
+	parameter_size = arglist_size + envlist_size + (argv_num * 8) + (envp_num * 8) + 8;
+	assert(parameter_size  + 0x100 < PG_SIZE);
+
+	/* get envp and argv string list's start address */
+	pa_start = (current->user_stack - arglist_size - 8) & (~0x7); /* bottom limit, 8 byte align */
+	pv_start = (pa_start - envlist_size - 8) & (~0x7);
+
+	/* get envp and argv address */
+	envpp = (void *)(pv_start - envp_num * 8);
+	argvp = (void *)((uint64_t)envpp - argv_num * 8);
+
+	kstart = kbuf + (argv_num + envp_num)*8 + 0x30;
+	kargvp = kbuf;
+	kenvpp = kbuf + argv_num * 8 + 0x10;	//gap
+	copy_strlist((char **)kargvp, argv, kstart);
+	copy_strlist((char **)kenvpp, envp, kstart + arglist_size + 0x30);
+
+
+	/* free previous mm_struct TODO give up free */
+	//unmap_mm(current);
+	current->mm = NULL;
 
 	/* prepare for loading */
 	assert(current->mm == NULL);
@@ -185,15 +241,13 @@ void exec(char *filename, char *argv[], char *envp[]) {
 	current->mm->entry = ((Elf64_Ehdr *)fp)->e_entry;
 	current->mm->pgd = alloc_pgd();
 	current->mm->mm_count = 0;
-	current->mm->highest_vm_end = 0;
 	current->mm->code_start = 0;
 	current->mm->code_end = 0;
 	current->mm->data_start = 0;
 	current->mm->data_end = 0;
-	/* toppest user address */
-	current->user_stack = 0x800000000000;
 	/* will be adjusted later, should be the lowest userable address above .text .data segments */
 	current->mm->user_heap = 0;
+	current->mm->brk = 0;
 
 	/* Even we do not have a context switch, we have to do switch_mm to go to new address space */
 	switch_mm(NULL, current);
@@ -274,28 +328,7 @@ void exec(char *filename, char *argv[], char *envp[]) {
 	else
 		current->mm->user_heap = PG_ALIGN(current->mm->code_end);
 
-	/**
-	 * we haven't setup mappings for stack and heap. they are different from code & data segment
-	 * they don't have back file.
-	 */
-
-	/* insert vma for heap */
-/*	vma = (struct vm_area_struct *)get_zero_page();
-	if (vma == NULL)
-		panic("[exec] ERROR: vma alloc failed!");
-	else {
-		vma->next = NULL;
-		vma->vm_start = current->mm->user_heap;
-		vma->vm_end = vma->vm_start + PG_SIZE;
-		vma->prot = PTE_RW;
-		vma->vm_pgoff = 0;
-		vma->vm_filesz = 0;
-		vma->vm_align = PG_SIZE;
-		vma->vm_file = NULL;
-	}
-*/
-	/* insert current vma at the tail, assume segment are put in increasing order */
-//	insert_vma(vma, current->mm);
+	current->mm->brk = current->mm->user_heap;
 
 	/* insert vma for stack */
 	vma = (struct vm_area_struct *)get_zero_page();
@@ -333,25 +366,9 @@ void exec(char *filename, char *argv[], char *envp[]) {
 	/* map a page for stack, we are going to prepare stack data for new process */
 	map_a_page(vma, (uint64_t)(current->user_stack - PG_SIZE));
 
-	arglist_size = get_strlist_size(argv); /* count ending '\0' into size */
-	envlist_size = get_strlist_size(envp);
-	argv_num = get_strlist_num(argv) + 1; /* reserve space for NULL */
-	envp_num = get_strlist_num(envp) + 1;
-
-	parameter_size = arglist_size + envlist_size + (argv_num * 8) + (envp_num * 8) + 8;
-	assert(parameter_size  + 0x100 < PG_SIZE);
-
-	/* get envp and argv string list's start address */
-	pa_start = (current->user_stack - arglist_size - 8) & (~0x7); /* bottom limit, 8 byte align */
-	pv_start = (pa_start - envlist_size - 8) & (~0x7);
-
-	/* get envp and argv address */
-	envpp = (void *)(pv_start - envp_num * 8);
-	argvp = (void *)((uint64_t)envpp - argv_num * 8);
-
 	/* copy string and string pointer array at the same time */
-	copy_strlist((char **)envpp, envp, (char *)pv_start);
-	copy_strlist((char **)argvp, argv, (char *)pa_start);
+	copy_strlist((char **)envpp, (char **)kenvpp, (char *)pv_start);
+	copy_strlist((char **)argvp, (char **)kargvp, (char *)pa_start);
 
 	/* copy argc */
 	argcp = argvp - 8;
@@ -492,8 +509,12 @@ int remove_from_tasklist(task_struct **head, task_struct *ts) {
 
 /* put myself on list, and set sleep time */
 void sleep(task_struct **list, uint64_t time) {
-	remove_from_tasklist(&task_headp, current);
-	add_to_tasklist(list, current);
+	int removed = 0;
+	removed = remove_from_tasklist(&task_headp, current);
+	if(removed == 0) // succeeded
+		add_to_tasklist(list, current);
+	else
+		panic("[sleep]can't find process on active list!");
 
 	current->sleep_time = time;
 	current->state = SLEEP;
@@ -539,4 +560,39 @@ void wakeup(task_struct **list, task_struct *ts, int flag) {
 
 /* should we schedule immediately TODO, maybe not*/
 //	schedule();
+}
+
+task_struct *find_process_by_pid(int pid, task_struct *task_list) {
+	task_struct *p;
+
+	/* we find process on all possible list */
+	p = task_list;
+	while(p != NULL && p->pid != pid)
+		p = p->next;
+
+	if (p != NULL)
+		return p;
+	else
+		return NULL;
+}
+
+/* the reverse process of fork, a lot of reclaim of resources*/
+void free_process(task_struct *p) {
+
+	assert(p != NULL && p->state == ZOMBIE);
+
+	/* free kernel stack */
+	free_page((uint64_t)VA2PA(p->kernel_stack) >> PG_BITS);
+
+	/* we should deduct file count, but we don't need to here, for we don't cache file data */
+
+	/* free user space */
+	assert(p->mm != NULL);
+	//unmap_mm(p);
+
+	/* remove myself from zombie list */
+	remove_from_tasklist(&zombie_list, p);
+
+	/* disappear */
+	free_page((uint64_t)VA2PA(p) >> PG_BITS);
 }

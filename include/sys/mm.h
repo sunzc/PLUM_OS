@@ -70,11 +70,10 @@ typedef struct __attribute__((__packed__)) mm_struct {
 	/* we need to know the follow for user stack, heap, brk management */
 	uint64_t code_start, code_end;
 	uint64_t data_start, data_end;
-	uint64_t user_heap;
+	uint64_t user_heap, brk;
 
 	/* statistic info */
 	int mm_count;
-	uint64_t highest_vm_end;
 }mm_struct;
 
 void *memset(void *s, int c, size_t n);

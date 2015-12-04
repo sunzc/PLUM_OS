@@ -21,7 +21,6 @@ _isr_wrapper_kbd:
 
 	cld /*  C code following the sysV ABI requires DF to be clear on function entry */
 	call kbdintr
-	sti
 	popq %r15 
 	popq %r14 
 	popq %r13 
@@ -37,4 +36,5 @@ _isr_wrapper_kbd:
 	popq %rbx
 	popq %rax
 	popq %rbp
+	sti
 	iretq

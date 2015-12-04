@@ -17,8 +17,8 @@ static uint8_t normalmap[256] =
   NO,   NO,   NO,   NO,   NO,   NO,   NO,   '7',  // 0x40
   '8',  '9',  '-',  '4',  '5',  '6',  '+',  '1',
   '2',  '3',  '0',  '.',  NO,   NO,   NO,   NO,   // 0x50
-  [0x9C] '\n',      // KP_Enter
-  [0xB5] '/',       // KP_Div
+//  [0x9C] '\n',      // KP_Enter
+// [0xB5] '/',       // KP_Div
 };
 
 static uint8_t shiftmap[256] =

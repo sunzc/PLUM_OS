@@ -5,10 +5,11 @@
 #include <sys/mm.h>
 #include <sys/tarfs.h>
 
-#define MAX_FILE_NUM		20
-#define THREAD_NAME_SIZE	100
+#define MAX_FILE_NUM	20
+#define NAME_SIZE	64	
+#define SIGTERM		15
 
-typedef enum TASK_STATE{RUNNING=1, ACTIVE, SLEEP} TASK_STATE;
+typedef enum TASK_STATE{RUNNING=1, ACTIVE, SLEEP, ZOMBIE} TASK_STATE;
 
 typedef struct __attribute__((__packed__))  task_struct{
 	struct task_struct *prev;
@@ -27,7 +28,22 @@ typedef struct __attribute__((__packed__))  task_struct{
 	/* only increase */
 	int pid;
 	int ppid;
-	char name[THREAD_NAME_SIZE];
+	char name[NAME_SIZE];
+	char cwd[NAME_SIZE];
+
+	/* support process management, like waitpid, if set, father is waiting */
+	int waited;
+	/* orphon */
+	int orphan;
+
+	/* exit status , father may care about it */
+	int exit_status;
+
+	/* support teminate signal, 1 means someone kill me */
+	int sigterm;
+
+	/* timeslice, deduct at each timer interrupt , 10 to 0, if 0, set 10 and schedule */
+	int timeslice;
 
 	/**
 	 * process state
@@ -79,5 +95,9 @@ int remove_from_tasklist(task_struct **head, task_struct *ts);
 void add_to_tasklist(task_struct **head, task_struct *ts);
 void sleep(task_struct **list, uint64_t time);
 void wakeup(task_struct **list, task_struct *ts, int flag);
-
+void exit_st(task_struct *, int status);
+task_struct *find_process_by_pid(int pid, task_struct *task_list);
+void free_process(task_struct *p);
+uint64_t kill_by_pid(int pid, int sig);
+uint64_t waitpid(int pid);
 #endif
