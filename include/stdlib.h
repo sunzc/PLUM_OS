@@ -59,7 +59,7 @@ int dup2(int oldfd, int newfd);
 
 // directories
 #define NAME_MAX 255
-struct dirent
+struct __attribute__((__packed__))dirent
 {
   long d_ino;
   off_t d_off;

@@ -1,3 +1,4 @@
+#include<stdio.h>
 #include<stdlib.h>
 #include<syscall.h>
 
@@ -39,6 +40,7 @@ void *opendir(const char *name){
 struct dirent *readdir(void *dir){
 	DIR* dirp = (DIR *)dir;
 	struct dirent *dp;
+//	printf("[readdir]dir : 0x%lx\n", dir);
 
 	for(;;){
 		if(dirp->dd_loc == 0) {

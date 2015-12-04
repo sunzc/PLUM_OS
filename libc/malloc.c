@@ -81,8 +81,10 @@ static void *extend_heap(size_t words)
 
 	/* Allocate an even number of words to maintain alignment */
 	size = (words % 2) ? (words + 1) * WSIZE : words * WSIZE;
-	if ((long)(bp = sbrk(size)) == -1)
+	if ((bp = sbrk(size)) == NULL)
 		return NULL;
+
+	//printf("[extend_heap]bp:0x%lx\n", bp);
 
 	/* Initilize the free block header/footer and the epilogue header */
 	PUT(HDRP(bp), PACK(size, 0));		/* Free block header */

@@ -15,18 +15,21 @@ void *sbrk(size_t incr)
 	if ((incr < 0) || (__curbrk + incr) > __max_addr) {
 		//errno = ENOMEM;
 		printf("ERROR: sbrk failed. Ran out of memory ...\n");
-		return (void*) -1;
+		return NULL;
 	}
 
 	if(incr == 0){
-		printf("in sbrk: curbrk %lx\n", old_brk);
+//		printf("in sbrk: curbrk %lx\n", old_brk);
 		return (void *)old_brk;
 	}
 
 	ret = brk((void *)(old_brk + incr));
 
+//	printf("[sbrk] ret from brk :0x%lx, old_brk :0x%lx", ret, old_brk);
+
 	if (ret < 0){
 		printf("ERROR: sbrk failed!\n");
+		return NULL;
 	}
 
 //	printf("in sbrk: old_brk is %lx, after incr, brk %lx\n", old_brk, __curbrk);

@@ -285,17 +285,21 @@ char* locate_executable_file(char **var_list, char *filename){
 	while(last_len > 0 && pre != NULL && (p = strchr(pre, ':')) != NULL){
 		cur_len = strlen(p);
 		strncpy(buf, pre, last_len - cur_len);
-		buf[last_len - cur_len] = '/';
-
-		if((strlen(filename) + last_len - cur_len + 1) < MAX_BUFFER_SIZE - 1){
+		if (buf[last_len - cur_len - 1] != '/') {
+			buf[last_len - cur_len] = '/';
 			strncpy(buf+last_len - cur_len + 1, filename, strlen(filename));
+			buf[last_len - cur_len + 1 + strlen(filename)] = '\0';
 		} else {
+			strncpy(buf+last_len - cur_len, filename, strlen(filename));
+			buf[last_len - cur_len + strlen(filename)] = '\0';
+		}
+
+		if((strlen(filename) + last_len - cur_len + 1) > MAX_BUFFER_SIZE - 1){
 			printf("error in locate_executable_file: filename too long!\n");
 			free(buf);
 			return NULL;
 		}
 
-		buf[last_len - cur_len + 1 + strlen(filename)] = '\0';
 		if(does_file_exist(buf))
 			return buf;
 
@@ -357,31 +361,37 @@ char *get_fullpath(char *path, char *envp[]) {
 		ptr = getcwd(NULL, MAX_BUFFER_SIZE - 1);
 
 		if (ptr != NULL) {
-			len = min(MAX_BUFFER_SIZE - 1, strlen(ptr));
-			len1 = min(MAX_BUFFER_SIZE - len - 1, strlen(path));
+			len = strlen(ptr);
+			len1 = strlen(path);
+
+			assert(len + len1 < MAX_BUFFER_SIZE);
 
 			strncpy(buf, ptr, len);
-			buf[len] = '/';
+			if(ptr[len - 1] != '/')
+				buf[len++] = '/';
 
-			strncpy(buf + len + 1, path, len1);
-			buf[len1 + len + 1] = '\0';
+			strncpy(buf + len, path, len1);
+			buf[len1 + len] = '\0';
 		} else
 			printf("ERROR: can't get current working directory!\n");
 	}else if(hc == '~'){
 		ptr = get_var(envp, "HOME=");
 
 		if(ptr != NULL){
-			len = min(MAX_BUFFER_SIZE - 1, strlen(ptr));
-			len1 = min(MAX_BUFFER_SIZE - len - 1, strlen(path) - 1);
+			len = strlen(ptr);
+			len1 = strlen(path) - 1;	//exclude '~'
+
+			assert(len + len1 < MAX_BUFFER_SIZE);
 
 			strncpy(buf, ptr, len);
-			buf[len] = '/';
+			if(ptr[len - 1] != '/')
+				buf[len++] = '/';
 
 			if(strlen(path) > 1){
-				strncpy(buf + len + 1, path + 1, len1);
-				buf[len1 + len + 1] = '\0';
+				strncpy(buf + len, path + 1, len1);
+				buf[len1 + len] = '\0';
 			} else
-				buf[len + 1] = '\0';
+				buf[len] = '\0';
 
 		} else
 			printf("error in execute: can't get env HOME!\n");
@@ -398,6 +408,8 @@ int list_file(char *fullpath) {
 	struct dirent *entry;
 	DIR *dir;	
 
+//	printf("[list_file] fullpath:0x%lx\n",fullpath);
+
 	if(fullpath)
 		dir = opendir(fullpath);
 	else
@@ -406,8 +418,12 @@ int list_file(char *fullpath) {
 	if (!dir)
 		return -1;
 	else{
-		while ((entry = readdir(dir)) != NULL)
-			printf("%s\t", entry->d_name);
+		while ((entry = readdir(dir)) != NULL) {
+			entry->d_name[10] = '\0';
+			printf("%s ", entry->d_name);
+		}
+
+//		printf("[list_file] fullpath:0x%lx\n",fullpath);
 
 		printf("\n");
 	}

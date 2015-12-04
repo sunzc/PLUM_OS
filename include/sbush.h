@@ -9,6 +9,13 @@
 #define PAGE_SIZE (1<<12) // page size 4KB
 //#define DEBUG
 
+#define assert(cond) do {                                  \
+                if (!(cond)) {                             \
+                        printf("assert fail in %s, at line %d\n",__func__, __LINE__);     \
+			while(1);				\
+                }                                               \
+        } while (0)
+
 char** parse_cmds(char* cmd, int* arg_size); // parse user cmds into a list of strings
 char* get_var(char** var_list, char* var_name); // get variable value by its name in var_list
 void set_var(char** var_list, char* var_name, char* var_value); // set variable value in var_list

@@ -17,7 +17,7 @@ int main(int argc, char* argv[], char* envp[]){
 	int len;
 
 	/* for the signal handler */
-	void (*res)(int);
+//	void (*res)(int);
 
 	SH_VAR_LIST = (char**) malloc(MAX_SH_VAR_NUM * sizeof(char*));
 
@@ -85,13 +85,13 @@ int main(int argc, char* argv[], char* envp[]){
 	/** if we are not running scripts, that is, running programs interactively
 	 *  we don't Ctrl-C to terminate our shell, so just ignore it!
 	 */
-	res = signal(SIGINT, handle_signal);
+/*	res = signal(SIGINT, handle_signal);
 	if(res == SIGERR){
 		printf("signal failed!\n");
 		exit(0);
 		return 0;
 	}
-
+*/
 	cmd =(char*) malloc(MAX_CMD_SIZE * sizeof(char));
 	while(1){
 		printf("%s",prompt);
