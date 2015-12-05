@@ -273,6 +273,9 @@ void exec(char *filename, char *argv[], char *envp[]) {
 	//unmap_mm(current);
 	current->mm = NULL;
 
+	/* change process name */
+	strncpy(current->name, argv[0], strlen(argv[0]));
+
 	/* prepare for loading */
 	assert(current->mm == NULL);
 
