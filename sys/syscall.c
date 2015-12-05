@@ -304,10 +304,11 @@ uint64_t open(sc_frame *sf) {
 	/* only allow default mode */
 	assert(mode == 0);
 
-#ifdef DEBUG_SYSCALL
-	printf("[open] path:%s\n",path);
-#endif
 	fd = tarfs_open(path, "r");
+
+#ifdef DEBUG_SYSCALL
+	printf("[open] path:%s, fd:%d\n",path, fd);
+#endif
 
 	return (uint64_t)fd;
 }
@@ -403,7 +404,6 @@ uint64_t chdir(sc_frame *sf) {
 	int len;
 
 	copy_from_user(cwd, path, NAME_SIZE);
-	//printf("[chdir] cwd:%s\n",cwd);
 
 	len = strlen(cwd);
 	// support cd .. but not cd ../../
@@ -419,10 +419,15 @@ uint64_t chdir(sc_frame *sf) {
 
 		if(len >= 0)
 			cwd[len + 1] = '\0';
-		else
-			return -1;
+		else {
+			cwd[0] = '/';
+			cwd[1] = '\0';
+		}
 	}
 
+#ifdef DEBUG_SYSCALL
+	printf("[chdir] cwd after deal with ..:%s\n", cwd);
+#endif
 	/* validate whether it's a legal path, no access control here */
 	if ((fd = tarfs_open(cwd,"r")) > 0) {
 		len = strlen(current->file_array[fd].name);
