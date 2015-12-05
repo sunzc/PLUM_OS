@@ -7,7 +7,7 @@
 
 #define MAX_FILE_NUM	20
 #define NAME_SIZE	64	
-#define SIGTERM		15
+#define SIGKILL		9
 
 typedef enum TASK_STATE{RUNNING=1, ACTIVE, SLEEP, ZOMBIE} TASK_STATE;
 
@@ -100,4 +100,5 @@ task_struct *find_process_by_pid(int pid, task_struct *task_list);
 void free_process(task_struct *p);
 uint64_t kill_by_pid(int pid, int sig);
 uint64_t waitpid(int pid);
+void thread_clear(void);
 #endif

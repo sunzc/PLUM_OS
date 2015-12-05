@@ -10,6 +10,8 @@
 extern phymem_block pmb_array[MAX_PHY_BLOCK];
 extern uint32_t pmb_count;
 extern task_struct *current;
+extern task_struct *task_headp;
+extern task_struct *clear_zombie;
 
 void *_physbase;
 void *_physfree;
@@ -64,6 +66,9 @@ void start(uint32_t* modulep, void* physbase, void* physfree)
 */
 //	__asm volatile("sti"::);
 	kernel_thread(thread_idle, "idle");
+	int clear_zombie_pid;
+	clear_zombie_pid = kernel_thread(thread_clear, "clear_zombie");
+	clear_zombie = find_process_by_pid(clear_zombie_pid, task_headp);
 
 	int kinit_pid;
 	kinit_pid = kernel_thread(run_init_process, "init_process");
@@ -109,10 +114,12 @@ void thread_A() {
 		schedule();
 	}
 }
+
 void thread_idle() {
 	/* we do nothing here, just wait for interrupt */
 	while(1);
 }
+
 
 void thread_B() {
 	while(1) {

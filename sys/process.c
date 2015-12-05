@@ -8,9 +8,12 @@
 /* task struct are linked in a double-linked list, task_headp points to the head */
 task_struct *task_headp = NULL;
 task_struct *current = NULL;
+task_struct *clear_zombie = NULL;
 task_struct *sleep_task_list = NULL;
 task_struct *wait_stdin_list = NULL;
 task_struct *zombie_list = NULL;
+int zombie_count = 0;
+
 extern void *pgd_start;
 extern void __ret_to_user(void *user_stack, void *user_entry);
 
@@ -635,4 +638,23 @@ void free_process(task_struct *p) {
 
 	/* disappear */
 	free_page((uint64_t)VA2PA(p) >> PG_BITS);
+}
+
+
+void thread_clear() {
+	/* we do nothing here, just wait for interrupt */
+	task_struct *p, *next;
+	while (1) {
+		p = zombie_list;
+		while(p != NULL) {
+			next = p->next;
+			if (p->orphan == 1) {
+				free_process(p);
+				//printf("zombie process pid:%d is freed!\n", p->pid);
+			}
+			p = next;
+		}
+		zombie_count = 0;
+		sleep(&sleep_task_list, -1);
+	}
 }
