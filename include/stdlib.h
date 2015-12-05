@@ -9,6 +9,9 @@ extern __thread int errno;
 
 void exit(int status);
 
+/* math */
+int atoi(char *str);
+
 // memory
 void *malloc(size_t size);
 void free(void *ptr);
@@ -22,6 +25,7 @@ pid_t getppid(void);
 int execve(const char *filename, char *const argv[], char *const envp[]);
 pid_t waitpid(pid_t pid, int *status, int options);
 unsigned int sleep(unsigned int seconds);
+uint64_t ps();
 
 // signals
 typedef void (*sighandler_t)(int);
@@ -29,6 +33,7 @@ typedef void (*__sighandler_t)(int);
 sighandler_t signal(int signum, sighandler_t handler);
 int kill(pid_t pid, int sig);
 unsigned int alarm(unsigned int seconds);
+int get_sig(char *p);
 #define SIGERR ((__sighandler_t)-1)
 
 #define SIG_DFL ((__sighandler_t)0)

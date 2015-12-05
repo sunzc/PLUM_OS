@@ -12,6 +12,10 @@ pid_t fork(){
 	return (pid_t)syscall_0(SYS_fork);
 }
 
+uint64_t ps(){
+	return syscall_0(SYS_ps);
+}
+
 pid_t getpid(void){
 	return (pid_t) syscall_0(SYS_getpid);
 }

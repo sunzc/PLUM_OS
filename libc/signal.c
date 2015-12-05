@@ -50,6 +50,17 @@ int kill(pid_t pid, int sig){
 	return (int)syscall_2(SYS_kill, (uint64_t) pid, (uint64_t) sig);
 }
 
+int get_sig(char *str) {
+	if (str[0] == '-')
+		return atoi(str + 1);
+	else {
+		printf("ERROR: wrong format of signal number parameter!\n Please user kill -9 pid\n");
+		exit(1);
+
+		return -1;
+	}
+}
+
 unsigned int alarm(unsigned int seconds){
 	return (uint32_t)syscall_1(SYS_alarm, (uint64_t) seconds);
 }

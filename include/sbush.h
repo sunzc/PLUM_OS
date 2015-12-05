@@ -12,7 +12,7 @@
 #define assert(cond) do {                                  \
                 if (!(cond)) {                             \
                         printf("assert fail in %s, at line %d\n",__func__, __LINE__);     \
-			while(1);				\
+			exit(1);				\
                 }                                               \
         } while (0)
 
