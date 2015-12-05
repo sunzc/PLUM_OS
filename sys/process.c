@@ -142,6 +142,31 @@ static task_struct * select_task_struct(void) {
 		return task_headp;
 }
 
+void get_interp(char *interp_name, char *fp) {
+	int i = 0;
+	while((fp[i + 2] != '\n') && i < NAME_SIZE) { //skip '#!'
+		interp_name[i] = fp[i+2];
+		i++;
+	}
+
+	assert(i < NAME_SIZE);
+	interp_name[i] = '\0';
+}
+
+#define ARG_LIST_SIZE	10
+void get_interp_argv(char *interp_argv[], char *argv[], char *interp_name) {
+	int i = 0;
+
+	interp_argv[0] = interp_name;
+	while (i < ARG_LIST_SIZE && argv[i] != NULL) {
+		interp_argv[i + 1] = argv[i];
+		i++;
+	}
+
+	assert(i < ARG_LIST_SIZE);
+	interp_argv[i + 1] = NULL;
+}
+
 /**
  * exec the first user process/
  * 	1. load elf_binary into memory(not really, demand-paging) and build corresponding vm_struct.
@@ -152,6 +177,10 @@ static task_struct * select_task_struct(void) {
 void exec(char *filename, char *argv[], char *envp[]) {
 	int i, fd;
 	void *fp;
+
+	/* interpreter related */
+	char interp_name[NAME_SIZE];
+	char *interp_argv[ARG_LIST_SIZE];
 
 	/* future kernel stack */
 	void *future_kstack;
@@ -182,6 +211,10 @@ void exec(char *filename, char *argv[], char *envp[]) {
 	uint64_t p_align;
 
 	fd = tarfs_open(filename, "r");
+	if (fd < START_FD) {
+		printf("execve failed: file %s does not exist!\n",filename);
+		exit_st(current, 1);
+	}
 
 	/* we don't want to change file->pos, give size 0, we will get the file pointer at start pos 0 */
 	fp = tarfs_read(fd, 0);
@@ -197,6 +230,13 @@ void exec(char *filename, char *argv[], char *envp[]) {
 			map_a_page(vma, (uint64_t)argv);
 		else
 			panic("[exec]ERROR:can't find valid vma for argv!");
+	}
+
+	/* Add some crazy thing here, support script start with #!bin/sbush */
+	if (strncmp(fp,"#!", 2) == 0) {
+		get_interp(interp_name, fp);
+		get_interp_argv(interp_argv, argv, interp_name);
+		exec(interp_name, interp_argv, envp);
 	}
 
 	/* toppest user address */
