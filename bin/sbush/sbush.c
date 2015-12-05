@@ -34,7 +34,12 @@ int main(int argc, char* argv[], char* envp[]){
 	if(argc == 2){
 		len = strlen(argv[1]);
 		if(len > 3 && 0 == strncmp(argv[1]+len-3,".sh", 3)){
-			fd = open(argv[1], O_RDONLY);
+			if (argv[1][0] == '/')
+				fd = open(argv[1], O_RDONLY);
+			else {
+				p = locate_executable_file(SH_VAR_LIST, argv[1]);
+				fd = open(p, O_RDONLY);
+			}
 
 			if(fd < 0){
 				printf("error in main: file does not exists %s\n", argv[1]);

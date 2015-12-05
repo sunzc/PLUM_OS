@@ -419,7 +419,6 @@ int list_file(char *fullpath) {
 		return -1;
 	else{
 		while ((entry = readdir(dir)) != NULL) {
-			entry->d_name[10] = '\0';
 			printf("%s ", entry->d_name);
 		}
 
