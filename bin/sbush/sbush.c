@@ -138,6 +138,11 @@ static void execute(char** arg_list, int arg_size, char** sh_var_list, char** pr
 			debug_printf("execute:fullpath = %s\n", fullpath);
 
 			if(0 == strcmp(arg_list[0],"cd")){ // cd
+				len = strlen(fullpath);
+				if (fullpath[len - 1] != '/') {	// handle tarfs dir name always end with '/'
+					fullpath[len] = '/';
+					fullpath[len + 1] = '\0';
+				}
 				err = chdir(fullpath);
 
 				if (err != 0){
