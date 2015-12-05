@@ -22,6 +22,7 @@
 #define SYS_dup        32
 #define SYS_dup2       33
 #define SYS_getdents   78
+#define SYS_ps	       300
 #define SYS_rt_sigaction	13
 #define SYS_rt_sigreturn	15
 

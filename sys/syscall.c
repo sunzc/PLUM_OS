@@ -23,11 +23,13 @@ struct  __attribute__((__packed__)) dirent {
 
 
 extern task_struct *current;
+extern task_struct *clear_zombie;
 extern task_struct *task_headp;
 extern task_struct *sleep_task_list;
 extern task_struct *wait_stdin_list;
 extern task_struct *zombie_list;
 extern int pid_count;
+extern int zombie_count;
 
 extern int stdin_buf_state;
 extern int stdin_buf_size;
@@ -77,6 +79,7 @@ void exit(sc_frame *sf);
 uint64_t kill(sc_frame *sf);
 uint64_t getpid(sc_frame *sf);
 uint64_t getppid(sc_frame *sf);
+uint64_t ps(sc_frame *sf);
 
 /* other helper functions */
 uint64_t read_stdin(char *buf, int size);
@@ -214,6 +217,9 @@ uint64_t syscall_handler(int syscall_num, sc_frame *sf) {
 			break;
 		case SYS_getppid:
 			res = getppid(sf);
+			break;
+		case SYS_ps:
+			res = ps(sf);
 			break;
 		default:
 			res = sys_null(syscall_num);
@@ -972,14 +978,21 @@ void exit_st(task_struct *ts, int status) {
 
 	if (ts->waited == 1) {
 		father = find_process_by_pid(ts->ppid, sleep_task_list);
-		if (father == NULL) {
-			// we need notify init to adopt this orphon, but now we don't support it
-			// first mark meself, so that if init want to do it, he can do it
+
+		// we need notify init to adopt this orphon, but now we don't support it
+		// first mark meself, so that if init want to do it, he can do it
+		if (father == NULL)
 			ts->orphan = 1;
-		} else
+		 else
 			wakeup(&sleep_task_list, father, 1);
-	} else // no one wait for me , so mark myself orphan, let init adopt us.
+	} else	// no one wait for me , so mark myself orphan, let init adopt us.
 		ts->orphan = 1;
+
+	if (ts->orphan == 1) {
+		zombie_count++;
+		if(zombie_count == 50)
+			wakeup(&sleep_task_list, clear_zombie, 1);
+	}
 
 	/* once schedule away, never come back, GOODBYE! */
 	schedule();
@@ -1007,7 +1020,7 @@ uint64_t kill_by_pid(int pid, int sig) {
 	}
 
 	// ignore all sig but terminate
-	if (sig == SIGTERM) {
+	if (sig == SIGKILL) {
 		tsp->sigterm = 1;
 	}
 
@@ -1020,4 +1033,35 @@ uint64_t getpid(sc_frame *sf) {
 
 uint64_t getppid(sc_frame *sf) {
 	return (uint64_t)(current->ppid);
+}
+
+uint64_t ps(sc_frame *sf) {
+	task_struct *p;
+
+	printf("pid\tppid\tuser\tstate\tprocess_name\n");
+	p = task_headp;
+	while(p != NULL) {
+		printf("%d\t%d\t%s\t%s\t%s\n", p->pid, p->ppid, (p->mm == NULL) ? "root" : "zhisun", (p->pid == current->pid)? "RUNING" : "ACTIVE", p->name);
+		p = p->next;
+	}
+
+	p = sleep_task_list;
+	while(p != NULL) {
+		printf("%d\t%d\t%s\tSLEEP\t%s\n", p->pid, p->ppid, (p->mm == NULL) ? "root" : "zhisun", p->name);
+		p = p->next;
+	}
+
+	p = wait_stdin_list;
+	while(p != NULL) {
+		printf("%d\t%d\t%s\tSLEEP\t%s\n", p->pid, p->ppid, (p->mm == NULL) ? "root" : "zhisun", p->name);
+		p = p->next;
+	}
+
+	p = zombie_list;
+	while(p != NULL) {
+		printf("%d\t%d\t%s\tZOMBIE\t%s\n", p->pid, p->ppid, (p->mm == NULL) ? "root" : "zhisun", p->name);
+		p = p->next;
+	}
+
+	return 0;
 }
