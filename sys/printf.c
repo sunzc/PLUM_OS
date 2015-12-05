@@ -20,6 +20,7 @@ static char *longlong_to_hexstring(char *buf, unsigned long long n);
 static char *longlong_to_string(char *buf, unsigned long long n);
 static void scoll_screen_up(void);
 void put_to_screen(char c, int col, int row, int color);
+void clear_screen(void);
 int vsprintf(char *str, const char *fmt, va_list ap);
 
 typedef struct loc{
@@ -259,4 +260,11 @@ static void scoll_screen_up(void) {
 	}
 
 	return;
+}
+
+void clear_screen(void) {
+	int i;
+	for (i = 0; i < MAX_ROW - 1; i++)
+		scoll_screen_up();
+	cursor.row = 0;
 }

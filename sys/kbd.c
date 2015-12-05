@@ -79,7 +79,6 @@ void kbdintr(void) {
 			case 0x1D: // Ctrl
 				put_to_screen('^', 64, 24, 0);
 				put_to_screen(shiftmap[normal_key_pressed], 65, 24, 0);
-				printf("@0x%x\n", normal_key_pressed);
 				if (normal_key_pressed == 0x2e) { //Ctrl^C, kill user-process
 					if(wait_stdin_list != NULL)
 						kill_by_pid(wait_stdin_list->pid, SIGTERM);
@@ -87,6 +86,8 @@ void kbdintr(void) {
 						kill_by_pid(current->pid, SIGTERM);
 					// else do nothing
 				}
+				if (normal_key_pressed == 0x26) // Ctrl-L
+					clear_screen();
 				break;
 		}
 
@@ -109,9 +110,15 @@ void kbdintr(void) {
 				case 0x1D: // Ctrl
 					put_to_screen('^', 64, 24, 0);
 					put_to_screen(shiftmap[normal_key_pressed], 65, 24, 0);
-					printf("@0x%x\n", normal_key_pressed);
-					if (normal_key_pressed == 0x2e)	// Ctrl^C
-						kill_by_pid(wait_stdin_list->pid, SIGTERM );
+					if (normal_key_pressed == 0x2e) { //Ctrl^C, kill user-process
+						if(wait_stdin_list != NULL)
+							kill_by_pid(wait_stdin_list->pid, SIGTERM);
+						else if(current->mm != NULL)
+							kill_by_pid(current->pid, SIGTERM);
+						// else do nothing
+					}
+					if (normal_key_pressed == 0x26) // Ctrl-L
+						clear_screen();
 					break;
 			}
 
