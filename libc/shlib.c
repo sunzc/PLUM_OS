@@ -372,6 +372,7 @@ char *get_fullpath(char *path, char *envp[]) {
 
 			strncpy(buf + len, path, len1);
 			buf[len1 + len] = '\0';
+			//printf("[get_fullpath]ptr : %s, buf:%s",ptr, buf);
 		} else
 			printf("ERROR: can't get current working directory!\n");
 	}else if(hc == '~'){
