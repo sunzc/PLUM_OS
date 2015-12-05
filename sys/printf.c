@@ -203,8 +203,10 @@ static char *longlong_to_hexstring(char *buf, unsigned long long n){
 	return &buf[pos];
 }
 
+#define TAB	8
 void print_to_screen(char c) {
 	int ncol, nrow;
+	int t_sp;
 
 	if (c != '\t' && c != '\n' && c !='\b' && c != '\r' && c != 0xe) {
 		screen_buffer[cursor.row * MAX_COLUMN * 2 + cursor.col * 2] = c;
@@ -235,6 +237,32 @@ void print_to_screen(char c) {
 
 		cursor.row = nrow;
 		cursor.col = ncol;
+	} else if (c == '\t') {
+		t_sp = cursor.col % TAB;
+
+		while(t_sp < TAB) {
+			screen_buffer[cursor.row * MAX_COLUMN * 2 + cursor.col * 2] = ' ';
+			screen_buffer[cursor.row * MAX_COLUMN * 2 + cursor.col * 2 + 1] = 0;
+			cursor.col++;
+			t_sp++;
+		}
+
+		ncol = cursor.col;
+
+		if ((ncol = cursor.col + 1) != MAX_COLUMN)
+			cursor.col = ncol;
+		else {
+			ncol = 0;
+			nrow = cursor.row + 1;
+
+			if (nrow == MAX_ROW) {
+				scoll_screen_up();
+				nrow = MAX_ROW - 1;
+			}
+
+			cursor.row = nrow;
+			cursor.col = ncol;
+		}
 	} else if (c == 0xe) {	/* '\b' */
 		if (stdin_buf_size > 0) {
 			screen_buffer[cursor.row * MAX_COLUMN * 2 + (cursor.col - 1) * 2] = ' ';
@@ -264,7 +292,7 @@ static void scoll_screen_up(void) {
 
 void clear_screen(void) {
 	int i;
-	for (i = 0; i < MAX_ROW - 1; i++)
+	for (i = 0; i < cursor.row; i++)
 		scoll_screen_up();
 	cursor.row = 0;
 }
