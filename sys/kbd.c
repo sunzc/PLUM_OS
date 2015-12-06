@@ -36,6 +36,7 @@ static uint8_t special_key_pressed = 0;
 
 void kbdintr(void) {
 	uint16_t status, data;
+	task_struct *p;
 	
 	status = inb(KBD_STAT_PORT);
 	if((status & KBD_DATA_INBF) == 0) {
@@ -83,9 +84,12 @@ void kbdintr(void) {
 				put_to_screen('^', 64, 24, 0);
 				put_to_screen(shiftmap[normal_key_pressed], 65, 24, 0);
 				if (normal_key_pressed == 0x2e) { //Ctrl^C, kill user-process
-					if(wait_stdin_list != NULL)
-						kill_by_pid(wait_stdin_list->pid, SIGKILL);
-					else if(current->mm != NULL)
+					if(wait_stdin_list != NULL) {
+						p = wait_stdin_list;
+						while(p->next != NULL)
+							p = p->next;
+						kill_by_pid(p->pid, SIGKILL);
+					} else if(current->mm != NULL)
 						kill_by_pid(current->pid, SIGKILL);
 					// else do nothing
 				}
@@ -114,9 +118,12 @@ void kbdintr(void) {
 					put_to_screen('^', 64, 24, 0);
 					put_to_screen(shiftmap[normal_key_pressed], 65, 24, 0);
 					if (normal_key_pressed == 0x2e) { //Ctrl^C, kill user-process
-						if(wait_stdin_list != NULL)
-							kill_by_pid(wait_stdin_list->pid, SIGKILL);
-						else if(current->mm != NULL)
+						if(wait_stdin_list != NULL) {
+							p = wait_stdin_list;
+							while(p->next != NULL)
+								p = p->next;
+							kill_by_pid(p->pid, SIGKILL);
+						} else if(current->mm != NULL)
 							kill_by_pid(current->pid, SIGKILL);
 						// else do nothing
 					}
