@@ -537,6 +537,8 @@ int remove_from_tasklist(task_struct **head, task_struct *ts) {
 	if (p == ts) {
 		/* if p points to ts, just remove it */
 		*head = ts->next;
+		/* when remove, always clear ->next */
+		ts->next = NULL;
 		return 0;
 	}
 
@@ -548,6 +550,7 @@ int remove_from_tasklist(task_struct **head, task_struct *ts) {
 	/* if we find it, remove it */
 	if (p->next == ts) {
 		p->next = ts->next;
+		ts->next = NULL;
 		return 0;
 	} else
 		return -1;

@@ -1019,6 +1019,11 @@ uint64_t kill_by_pid(int pid, int sig) {
 		return -1;
 	}
 
+	if (tsp->mm == NULL) {
+		printf("ERROR: can't kill kernel thread!\n");
+		return -1;
+	}
+
 	// ignore all sig but terminate
 	if (sig == SIGKILL) {
 		tsp->sigterm = 1;
